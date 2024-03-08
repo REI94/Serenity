@@ -26,6 +26,93 @@ void setup()
     emic.setLanguage(2);
 }
 
+void playGuidedBreathing() {
+  // Play a guided breathing message
+  emic.speak("A continuacion iniciaremos una serie de ejercicios de respiracion guiada");
+  delay(1000);
+
+  emic.speak("Sigue mis instrucciones por favor");
+  delay(1000);
+
+  emic.speak("Inhala profundamente y cuenta hasta cuatro");
+  delay(5000);
+
+  emic.speak("Reten la respiracion durante cuatro segundos");
+  delay(5000);
+
+  emic.speak("Exhala lentamente durante seis segundos");
+  delay(5000);
+
+  emic.speak("Repite este ciclo durante unos minutos");
+}
+
+void playTipsForStress() {
+  // Play tips to relieve stress
+  emic.speak("Sufres de estres");
+  delay(2000);
+
+  emic.speak("Entonces sigue estos consejos que te ayudaran a combatirlo");
+  delay(2000);
+
+  emic.speak("Respira profundamente y relajate");
+  delay(2000);
+
+  emic.speak("Tomate un momento para meditar o practicar la atencion plena");
+  delay(2000);
+
+  emic.speak("Haz ejercicio regularmente para liberar endorfinas");
+  delay(2000);
+
+  emic.speak("Escucha musica relajante para calmar la mente");
+  delay(2000);
+
+  emic.speak("Habla con alguien cercano sobre tus sentimientos");
+  delay(2000);
+
+  emic.speak("Desconectate de las pantallas y descansa");
+  delay(2000);
+
+  emic.speak("Practica la gratitud y enfocate en lo positivo");
+  delay(2000);
+}
+
+void playImproveSelfEsteem() {
+  // Tips to improve self-esteem
+  emic.speak("Si quieres mejorar tu autoestima ten en cuenta lo siguiente");
+  delay(2000);
+
+  emic.speak("Identifica tus fortalezas y habilidades unicas");
+  delay(2000);
+
+  emic.speak("Practica el autocuidado y la autorreflexion");
+  delay(2000);
+
+  emic.speak("Aprende a gestionar tus emociones y pensamientos negativos");
+  delay(2000);
+
+  emic.speak("Establece metas realistas y alcanzables");
+  delay(2000);
+
+  emic.speak("Reconoce tus logros y celebra tus exitos");
+  delay(1000);
+  emic.speak("por pequeños que sean");
+  delay(2000);
+
+  emic.speak("Evita las comparaciones con los demas");
+  delay(1000);
+  emic.speak("cada persona tiene su propio camino");
+  delay(2000);
+
+  emic.speak("No te dejes llevar por razonamientos sociales o expectativas externas");
+  delay(2000);
+
+  emic.speak("No trates de adivinar lo que piensan de ti");
+  delay(1000);
+  emic.speak("concentrate en tu propia opinion");
+  delay(2000);
+}
+
+
 void loop()
 {
     // The speak method sends a message to the module
@@ -33,9 +120,13 @@ void loop()
     // emic.speak("Welcome to the /\\/\\__EMIC2\\/\\/ library. This is an Arduino library \
     //             that simplifies the use of the __Emic __2 __Text __to __Speech __Module");
     // emic.speak(":-)1 Let's now look at some ##pause of the features that the library offers");
-    emic.speak("Hola como estaas"); 
-    emic.speak("Mi nombre es Sereenity ."); 
-    emic.speak("sere su robot de ayudaa .");
+    
+    guidedBreathing();
+
+    playTipsForStress();
+
+    playImproveSelfEsteem();
+
     delay(2500);
     ~emic;  // Pauses playback
     delay(500);
