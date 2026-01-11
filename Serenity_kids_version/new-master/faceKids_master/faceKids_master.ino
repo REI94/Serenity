@@ -70,16 +70,19 @@ void loop() {
     // Ejecutar acción basada en el código
     switch (CODE) {
       case 0: // Estado NEUTRO / IDLE
+        eyes1();    // Asegurar ojos normales
         mouthHap();
         break;
 
       case 1: // INCORRECTO / TRISTE
+        eyesX();    // Ojos de X
         mouthSad();
         delay(1000); 
         Nomouth();
         break;
 
       case 2: // CORRECTO / FELIZ (Simple + Brazos)
+        eyesHappy(); // Ojos ^ ^
         mouthHap();
         brazosBaile(); // Animación nueva de brazos
         // delay(1000); // Ya incluido en celebracionCorta
@@ -150,7 +153,7 @@ void loop() {
   }
   
   // Pequeña pausa para no saturar el bus I2C
-  delay(100);
+  delay(30); // Reducido para mejor latencia (antes 100)
 }
 
 // ==========================================
@@ -202,6 +205,7 @@ void talkLoop() {
 // FUNCIONES DE DIBUJO Y SERVOS (Copiadas y Limpiadas)
 // ==========================================
 
+// Ojos Normales
 void eyes1(){
   mylcd.Set_Draw_color(MAGENTA);
   // Ojos rectangulares
@@ -212,6 +216,56 @@ void eyes1(){
   // Pupilas
   mylcd.Fill_Circle(110, 120, 30);
   mylcd.Fill_Circle(240, 120, 30);
+}
+
+// Ojos X (Error)
+void eyesX(){
+  // 1. Borrar ojos anteriores
+  mylcd.Set_Draw_color(BLACK);
+  mylcd.Fill_Rectangle(70, 60, 150, 140);
+  mylcd.Fill_Rectangle(200, 60, 280, 140);
+  
+  // 2. Dibujar X Magenta
+  mylcd.Set_Draw_color(MAGENTA);
+  
+  // Grosor simulado offset (AUMENTADO para X mas gruesa)
+  for(int k=0; k<5; k++) {
+    // Ojo Izq
+    mylcd.Draw_Line(70+k, 60, 150, 140-k);
+    mylcd.Draw_Line(70, 60+k, 150-k, 140);
+    mylcd.Draw_Line(150-k, 60, 70, 140-k);
+    mylcd.Draw_Line(150, 60+k, 70+k, 140);
+    
+    // Ojo Der
+    mylcd.Draw_Line(200+k, 60, 280, 140-k);
+    mylcd.Draw_Line(200, 60+k, 280-k, 140);
+    mylcd.Draw_Line(280-k, 60, 200, 140-k);
+    mylcd.Draw_Line(280, 60+k, 200+k, 140);
+  }
+}
+
+// Ojos Felices (^ ^)
+void eyesHappy(){
+  // 1. Borrar ojos anteriores
+  mylcd.Set_Draw_color(BLACK);
+  mylcd.Fill_Rectangle(70, 60, 150, 140);
+  mylcd.Fill_Rectangle(200, 60, 280, 140);
+  
+  // 2. Dibujar ^ Magenta
+  mylcd.Set_Draw_color(MAGENTA);
+  
+  // Grosor simulado offset (k<7 como ajustó el usuario)
+  for(int k=0; k<7; k++) {
+    // Ojo Izq (Centro 110,60)
+    // Linea subida: (70, 110) -> (110, 60)
+    // Linea bajada: (110, 60) -> (150, 110)
+    mylcd.Draw_Line(70, 110+k, 110, 60+k);  
+    mylcd.Draw_Line(110, 60+k, 150, 110+k);
+    
+    // Ojo Der (Centro 240,60)
+    mylcd.Draw_Line(200, 110+k, 240, 60+k);
+    mylcd.Draw_Line(240, 60+k, 280, 110+k);
+  }
 }
 
 void Nomouth(){
