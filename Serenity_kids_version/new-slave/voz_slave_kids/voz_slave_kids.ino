@@ -100,6 +100,10 @@ void setup() {
   }
   myDFPlayer.volume(25);
   
+  // ESPERA INICIAL (Para que cargue la pantalla del Master)
+  Serial.println("Esperando carga de pantalla...");
+  delay(4000); 
+  
   currentState = STATE_INIT;
 }
 
