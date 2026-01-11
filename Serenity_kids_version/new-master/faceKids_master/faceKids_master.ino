@@ -14,6 +14,7 @@
 #define LED  A0
 
 LCDWIKI_SPI mylcd(MODEL,CS,CD,MISO,MOSI,RST,SCK,LED); 
+ 
 
 // Colores
 #define  BLACK   0x0000
@@ -29,6 +30,7 @@ int CODE = 0;
 int previousCODE = -1; // Para detectar cambios de estado
 Servo servo_3;
 Servo servo_5;
+void(* resetFunc) (void) = 0; // Función de reset
 
 void setup() {
   Wire.begin();
@@ -77,9 +79,10 @@ void loop() {
         Nomouth();
         break;
 
-      case 2: // CORRECTO / FELIZ (Simple)
+      case 2: // CORRECTO / FELIZ (Simple + Brazos)
         mouthHap();
-        delay(1000);
+        brazosBaile(); // Animación nueva de brazos
+        // delay(1000); // Ya incluido en celebracionCorta
         break;
 
       case 3: // Celebración 1 (Brazo Der Arriba)
@@ -128,6 +131,17 @@ void loop() {
          brazoIzqD();
          break;
 
+
+      case 20: // MODO HABLAR
+         talkLoop(); // Llamada a función externa
+         break;
+
+      case 99: // RESET REMOTO
+         Serial.println("RESET COMANDADO");
+         delay(100);
+         resetFunc();
+         break;
+
       default:
         // Si llega algo desconocido, quizas volver a neutro
         // mouthHap();
@@ -138,6 +152,51 @@ void loop() {
   // Pequeña pausa para no saturar el bus I2C
   delay(100);
 }
+
+// ==========================================
+// FUNCIONES DE ANIMACION
+// ==========================================
+
+void talkLoop() {
+  while (true) {
+     // Frame 1: Boca Abierta
+     Nomouth();
+     mouth3(); // Rectangulo (Boca abierta)
+     
+     // Poll I2C
+     Wire.requestFrom(8, 1);
+     if (Wire.available()) {
+        int c = Wire.read();
+        if (c != 20) { 
+          CODE = c; 
+          // LIMPIEZA DE SALIDA: Asegurar boca cerrada antes de salir
+          Nomouth();
+          mouthHap();
+          return; 
+        } 
+     }
+     delay(10); // Mas rapido (antes 150)
+
+     // Frame 2: Boca Cerrada (Feliz)
+     Nomouth();
+     mouthHap(); 
+     
+     // Poll I2C
+     Wire.requestFrom(8, 1);
+     if (Wire.available()) {
+        int c = Wire.read();
+        if (c != 20) { 
+          CODE = c; 
+          // LIMPIEZA DE SALIDA
+          Nomouth();
+          mouthHap();
+          return; 
+        }
+     }
+     delay(10); // Mas rapido
+  }
+}
+
 
 // ==========================================
 // FUNCIONES DE DIBUJO Y SERVOS (Copiadas y Limpiadas)
@@ -202,7 +261,6 @@ void mouthSad(){
 }
 
 // --- SERVOS ---
-
 void brazos2(){
   for (int angle = 0; angle <= 120; angle+=2) { // Incremento modificado para velocidad
     servo_3.write(angle);
