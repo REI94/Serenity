@@ -15,7 +15,6 @@ char hexaKeys[ROWS][COLS] = {
   {'*', '0', '#', 'D'}
 };
 
-// PINES CORREGIDOS POR EL USUARIO:
 byte rowPins[ROWS] = {9, 8, 7, 6}; 
 byte colPins[COLS] = {13, 12, 11, 10}; 
 
@@ -26,293 +25,393 @@ Keypad customKeypad = Keypad(makeKeymap(hexaKeys), rowPins, colPins, ROWS, COLS)
 // ==========================================
 SoftwareSerial mySerial(2, 4);  // RX, TX
 DFRobotDFPlayerMini myDFPlayer;
-const int PIN_BUSY = 3; // PIN DE CONTROL DE AUDIO
+const int PIN_BUSY = 3; 
 
-// CONSTANTES AUDIO (Mapeo desde CSV)
-const int F_INFO = 1;
-const int A_INTRO_1 = 1; 
-const int A_INTRO_2 = 2; 
-const int A_INTRO_3 = 3; 
+// CARPETAS
+const int F_INTRO   = 10;   // Carpeta 10: Bienvenida
+const int F_GRADE1  = 1;   // Carpeta 01: Primer Grado
+const int F_FRASES  = 7;   // Frases Feedback
+const int F_DESPEDIDA = 8; // Despedida
 
-const int F_EJERCICIOS = 2;
-const int A_Q1 = 1; 
-const int A_Q2 = 2; 
-const int A_Q3 = 3; 
-const int A_Q4 = 4; 
+// SFX FEEDBACK MAPPING
+const int F_CORRECTO   = 90; 
+const int F_INCORRECTO = 91; 
 
-const int F_RESPUESTAS = 3;
-const int A_CORRECTA_IS_5 = 1;
-const int A_CORRECTA_IS_8 = 2;
-const int A_CORRECTA_IS_9 = 3;
-const int A_CORRECTA_IS_7 = 4;
-const int A_INCORRECTO_FX = 5; 
-const int A_EXCELENTE     = 6; 
-const int A_EXITO_FX      = 7; 
-const int A_MUY_BIEN      = 8; 
-const int A_SIGAMOS       = 9; 
+// ARCHIVOS ESPECIALES
+const int A_INTRO_LAST         = 4;  // 004.mp3 (Presiona 1 para continuar)
+const int A_G1_MENU            = 16; // 016.mp3 (Menu de juegos)
+const int A_G1_ERROR_MENU      = 39; // 039.mp3 (Deseas avanzar o explicar?)
+const int A_G1_EXPLAIN_RETRY   = 40; // 040.mp3 (Explicacion 2)
 
-const int F_FINAL = 4;
-const int A_DESPEDIDA = 1;
+// CODIGOS PARA MASTER (I2C)
+const int MASTER_NEUTRAL = 0;
+const int MASTER_SAD     = 1;
+const int MASTER_HAPPY   = 2;
+const int MASTER_TALK    = 20;
 
-// VARIABLES RESPUESTAS ESPERADAS (MODIFICADO A String)
-const String RESP_Q1 = "5";
-const String RESP_Q2 = "8";
-const String RESP_Q3 = "9";
-const String RESP_Q4 = "7";
+int codigoParaMaster = MASTER_NEUTRAL; 
 
 // ==========================================
-// ESTADOS DEL ROBOT
+// DATOS DE JUEGOS
 // ==========================================
-enum RobotState {
-  STATE_INIT,
-  STATE_INTRO_1,
-  STATE_INTRO_2,
-  STATE_INTRO_3,
-  STATE_WAIT_START,
-  STATE_PLAY_Q1,
-  STATE_WAIT_A1,
-  STATE_PLAY_Q2,
-  STATE_WAIT_A2,
-  STATE_PLAY_Q3,
-  STATE_WAIT_A3,
-  STATE_PLAY_Q4,
-  STATE_WAIT_A4,
-  STATE_FINISH
+struct Question {
+  int fileNum;
+  char correctAnswer;
 };
 
-RobotState currentState = STATE_INIT;
-int codigoParaMaster = 0; 
+// --- DRILL (Calentamiento) - Folder 1 ---
+const int DRILL_TOTAL = 10; 
+Question questionsDrill[DRILL_TOTAL] = {
+   {3, '3'}, {4, '4'}, {7, '5'}, {8, '4'}, {9, '2'},
+   {10, '3'}, {11, '5'}, {12, '6'}, {13, '1'}, {14, '2'}
+};
+int drillIndices[DRILL_TOTAL]; 
 
-// Buffer para entrada acumulativa (Soporta N digitos)
-String inputBuffer = "";
+// Juego Seleccion Multiple (SM) - Folder 1
+const int SM_TOTAL = 10;
+Question questionsSM[SM_TOTAL] = {
+  {18, 'B'}, {19, 'A'}, {20, 'B'}, {21, 'B'}, {22, 'A'},
+  {23, 'B'}, {24, 'A'}, {25, 'A'}, {26, 'B'}, {27, 'A'}
+};
+int smIndices[SM_TOTAL];
+
+// Juego Verdadero/Falso (VF) - Folder 1
+const int VF_TOTAL = 10;
+Question questionsVF[VF_TOTAL] = {
+  {29, '2'}, {30, '2'}, {31, '1'}, {32, '2'}, {33, '2'},
+  {34, '1'}, {35, '1'}, {36, '1'}, {37, '2'}, {38, '1'}
+};
+int vfIndices[VF_TOTAL];
+
+const int QUESTIONS_PER_ROUND = 5; 
+
+// ==========================================
+// ESTADOS GLOBAL
+// ==========================================
+enum State {
+  ST_SETUP,
+  ST_INTRO_SEQ,
+  ST_WAIT_GRADE1,
+  ST_G1_INTRO_DRILL,
+  ST_G1_DRILL_GAME, 
+  ST_G1_MENU,
+  ST_G1_SM_GAME,
+  ST_G1_VF_GAME,
+  ST_IDLE
+};
+
+State currentState = ST_SETUP;
+int currentQuestionIdx = 0;
+
+void(* resetFunc) (void) = 0;
+
+// ==========================================
+// HELPERS
+// ==========================================
+
+void requestEvent() {
+  Wire.write(codigoParaMaster);
+}
+
+// talks = true -> Envia 20 (Master Talk) mientras reproduce
+// talks = false -> Mantiene codigo anterior (Master Happy/Sad) mientras reproduce
+void waitAudio(bool talks) {
+  if(talks) codigoParaMaster = MASTER_TALK;
+  
+  unsigned long t = millis();
+  while(digitalRead(PIN_BUSY) == HIGH && millis() - t < 1500) delay(10);
+  while(digitalRead(PIN_BUSY) == LOW) delay(10);
+  
+  // Al terminar, siempre volvemos a Neutro si estabamos hablando
+  // O reseteamos si estabamos riendo/llorando para limpiar la expresion
+  codigoParaMaster = MASTER_NEUTRAL;
+  delay(200); 
+}
+
+// bool isLast: Si es true, NO reproduce la frase de 'Siguiente pregunta'
+void playFeedback(bool correct, bool isLast) {
+  if (correct) {
+    // 1. Sonido FX Correcto + CARA FELIZ
+    codigoParaMaster = MASTER_HAPPY;
+    myDFPlayer.playFolder(F_CORRECTO, 1);
+    waitAudio(false); // NO sobrescribir cara con Talk. Mantener Happy.
+    
+    // 2. Frase Motivadora (Solo si no es la ultima)
+    if (!isLast) {
+      int phrase = random(1, 10); 
+      myDFPlayer.playFolder(F_FRASES, phrase);
+      waitAudio(true); // Aqui si Talk
+    } else {
+      // Si es la ultima, aseguramos volver a neutral manual pq waitAudio(false) arriba quizas dejo Happy
+      codigoParaMaster = MASTER_NEUTRAL;
+    }
+    
+  } else {
+    // 1. Sonido FX Incorrecto + CARA TRISTE
+    codigoParaMaster = MASTER_SAD;
+    myDFPlayer.playFolder(F_INCORRECTO, 1);
+    waitAudio(false); 
+
+    // 2. Frase Animo (Solo si no es la ultima)
+    if (!isLast) {
+      int phrase = random(10, 20); 
+      myDFPlayer.playFolder(F_FRASES, phrase);
+      waitAudio(true);
+    } else {
+      codigoParaMaster = MASTER_NEUTRAL;
+    }
+  }
+}
+
+void playFarewell() {
+  Serial.println("--- FAREWELL ---");
+  int bye = random(1, 9); 
+  myDFPlayer.playFolder(F_DESPEDIDA, bye);
+  waitAudio(true);
+}
+
+void handleErrorFlow(bool isLast) {
+  playFeedback(false, isLast); 
+  
+  // Si fue la ultima pregunta, el feedback ya se dio (solo sfx) y no hay "siguiente".
+  // Pero la logica original ofrece repetir explicacion...
+  // Si es la ultima, quizas ya no deberiamos ofrecer menu?
+  // El usuario pidio "no reproducir sonido feedback de siguiente".
+  // Asumiremos que el menu de error (Deseas avanzar o explicar) sigue siendo valido
+  
+  myDFPlayer.playFolder(F_GRADE1, A_G1_ERROR_MENU);
+  waitAudio(true);
+  
+  char key = 0;
+  while(true) {
+    key = customKeypad.getKey();
+    if (key == 'D') resetFunc(); 
+    
+    if (key == '1') {
+       return;
+    } else if (key == '2') {
+       myDFPlayer.playFolder(F_GRADE1, A_G1_EXPLAIN_RETRY);
+       waitAudio(true);
+       return; 
+    }
+  }
+}
+
+void shuffleArray(int* array, int size) {
+  for (int i = size - 1; i > 0; i--) {
+    int j = random(i + 1);
+    int temp = array[i];
+    array[i] = array[j];
+    array[j] = temp;
+  }
+}
+
+void prepareIndices() {
+  for(int i=0; i<DRILL_TOTAL; i++) drillIndices[i] = i;
+  shuffleArray(drillIndices, DRILL_TOTAL);
+  
+  for(int i=0; i<SM_TOTAL; i++) smIndices[i] = i;
+  shuffleArray(smIndices, SM_TOTAL);
+  
+  for(int i=0; i<VF_TOTAL; i++) vfIndices[i] = i;
+  shuffleArray(vfIndices, VF_TOTAL);
+}
+
+// ==========================================
+// MAIN
+// ==========================================
 
 void setup() {
   mySerial.begin(9600);
   Serial.begin(9600);
+  pinMode(PIN_BUSY, INPUT);
+  randomSeed(analogRead(A1)); 
   
-  pinMode(PIN_BUSY, INPUT); 
-  
-  Wire.begin(8);  
-  Wire.onRequest(requestEvent);
+  Wire.begin(8);
+  Wire.onRequest(requestEvent); 
   
   if (!myDFPlayer.begin(mySerial)) {
-    Serial.println("Error al iniciar DFPlayer");
+    Serial.println(F("Error DFPlayer"));
   }
   myDFPlayer.volume(25);
+  delay(3000);
   
-  // ESPERA INICIAL (Para que cargue la pantalla del Master)
-  Serial.println("Esperando carga de pantalla...");
-  delay(4000); 
+  prepareIndices(); 
   
-  currentState = STATE_INIT;
+  currentState = ST_INTRO_SEQ;
 }
-
-// FUNCION MAESTRA PARA ESPERAR AUDIO
-// FUNCION MAESTRA PARA ESPERAR AUDIO
-void waitAudio(bool isVoice) {
-  // 1. Avisar al Master si es voz
-  if (isVoice) {
-    codigoParaMaster = 20; 
-  }
-  
-  // ESPERAR A QUE EMPIECE (BUSY baje a LOW)
-  // Damos hasta 1.5 segundos para que el DFPlayer procese y empiece a sonar
-  unsigned long startTime = millis();
-  while (digitalRead(PIN_BUSY) == HIGH && millis() - startTime < 1500) {
-    delay(10);
-  }
-  
-  // Si aun sigue HIGH, es que no arrancó (timeout), pero igual seguimos para no bloquear
-  
-  // ESPERAR A QUE TERMINE (BUSY suba a HIGH)
-  while (digitalRead(PIN_BUSY) == LOW) {
-    delay(10);
-  }
-  
-  // 2. Avisar al Master que terminamos
-  if (isVoice) {
-    codigoParaMaster = 0;
-  }
-  Serial.println("DEBUG: Audio Terminado.");
-}
-
-void(* resetFunc) (void) = 0; // Declarar función de reset en dirección 0
 
 void loop() {
   char key = customKeypad.getKey();
   
-  if (key) {
-    Serial.print("DEBUG: Tecla: ");
-    Serial.println(key);
+  if (key == 'D') {
+      Serial.println("Reset");
+      codigoParaMaster = 99;
+      long w = millis();
+      while(millis() - w < 1500) delay(10);
+      resetFunc(); 
+  }
+
+  switch(currentState) {
     
-    // REINICIO TOTAL (Tecla 'D')
-    if (key == 'D') {
-      Serial.println("!!! REINICIO SOLICITADO !!!");
-      codigoParaMaster = 99; // Codigo especial para reiniciar Master
-      
-      // Esperamos un momento para asegurar que el Master lea el código vía I2C
-      // El Master lee cada 100ms, damos 1 segundo de margen.
-      long startWait = millis();
-      while(millis() - startWait < 1000) {
-         // Mantener bus I2C activo por si acaso
-         delay(10);
+    case ST_INTRO_SEQ:
+      Serial.println("--- INTRO ---");
+      for(int i=1; i<=3; i++){
+        myDFPlayer.playFolder(F_INTRO, i);
+        waitAudio(true);
       }
+      myDFPlayer.playFolder(F_INTRO, A_INTRO_LAST);
+      waitAudio(true);
       
-      resetFunc(); // Reiniciar Slave
-    }
-  }
-  
-  switch (currentState) {
-    case STATE_INIT:
-      Serial.println("Estado: INTRO 1");
-      myDFPlayer.playFolder(F_INFO, A_INTRO_1); 
-      waitAudio(true); 
-      currentState = STATE_INTRO_2;
+      Serial.println("Waiting for 1...");
+      currentState = ST_WAIT_GRADE1;
       break;
       
-    case STATE_INTRO_2:
-       Serial.println("Estado: INTRO 2");
-       myDFPlayer.playFolder(F_INFO, A_INTRO_2);
-       waitAudio(true);
-       currentState = STATE_INTRO_3;
-       break;
-
-    case STATE_INTRO_3:
-       Serial.println("Estado: INTRO 3 (Esperando confirmacion)");
-       myDFPlayer.playFolder(F_INFO, A_INTRO_3);
-       waitAudio(true);
-       Serial.println("Listo para recibir '#'");
-       currentState = STATE_WAIT_START;
-       break;
-
-    case STATE_WAIT_START:
-      if (key == '#') {
-        Serial.println("ACCION: Inicio Confirmado.");
-        currentState = STATE_PLAY_Q1;
-        delay(1000); 
+    case ST_WAIT_GRADE1:
+      if (key == '1') {
+        Serial.println("1 detected.");
+        currentState = ST_G1_INTRO_DRILL;
       }
       break;
-
-    // --- PREGUNTA 1 ---
-    case STATE_PLAY_Q1:
-      Serial.println("Pregunta 1");
-      myDFPlayer.playFolder(F_EJERCICIOS, A_Q1);
-      waitAudio(true); 
-      currentState = STATE_WAIT_A1;
-      inputBuffer = ""; // Resetear buffer
+      
+   case ST_G1_INTRO_DRILL:
+      Serial.println("--- G1 DRILL INTRO ---");
+      for(int i=1; i<=2; i++){
+         myDFPlayer.playFolder(F_GRADE1, i);
+         waitAudio(true);
+      }
+      currentQuestionIdx = 0;
+      currentState = ST_G1_DRILL_GAME;
       break;
-
-    case STATE_WAIT_A1:
-      handleInputAuto(key, RESP_Q1, STATE_PLAY_Q2, A_CORRECTA_IS_5);
-      break;
-
-    // --- PREGUNTA 2 ---
-    case STATE_PLAY_Q2:
-      Serial.println("Pregunta 2");
-      delay(1000); 
-      myDFPlayer.playFolder(F_EJERCICIOS, A_Q2);
-      waitAudio(true);
-      currentState = STATE_WAIT_A2;
-      inputBuffer = "";
-      break;
-
-    case STATE_WAIT_A2:
-      handleInputAuto(key, RESP_Q2, STATE_PLAY_Q3, A_CORRECTA_IS_8);
-      break;
-
-     // --- PREGUNTA 3 ---
-     case STATE_PLAY_Q3:
-      Serial.println("Pregunta 3");
-      delay(1000);
-      myDFPlayer.playFolder(F_EJERCICIOS, A_Q3);
-      waitAudio(true);
-      currentState = STATE_WAIT_A3;
-      inputBuffer = "";
-      break;
-
-    case STATE_WAIT_A3:
-      handleInputAuto(key, RESP_Q3, STATE_PLAY_Q4, A_CORRECTA_IS_9);
-      break;
-
-     // --- PREGUNTA 4 ---
-     case STATE_PLAY_Q4:
-      Serial.println("Pregunta 4");
-      delay(1000);
-      myDFPlayer.playFolder(F_EJERCICIOS, A_Q4);
-      waitAudio(true);
-      currentState = STATE_WAIT_A4;
-      inputBuffer = "";
-      break;
-
-    case STATE_WAIT_A4:
-      handleInputAuto(key, RESP_Q4, STATE_FINISH, A_CORRECTA_IS_7);
-      break;
-
-    case STATE_FINISH:
-      Serial.println("Fin");
-      delay(1000);
-      myDFPlayer.playFolder(F_FINAL, A_DESPEDIDA);
-      codigoParaMaster = 5; 
-      waitAudio(true);
-      delay(5000); 
-      currentState = STATE_INIT; 
-      break;
-  }
-}
-
-// Función con Validación AUTOMÁTICA (Sin '#')
-void handleInputAuto(char key, String correctAnswer, RobotState nextState, int explanationAudio) {
-  if (key) {
-    if (key >= '0' && key <= '9') {
-       inputBuffer += key; // Agregar dígito
-       Serial.print("Buffer actual: "); Serial.println(inputBuffer);
-       
-       // Verificar Longitud
-       if (inputBuffer.length() >= correctAnswer.length()) {
-         Serial.println("DEBUG: Longitud alcanzada. Verificando...");
+   
+   case ST_G1_DRILL_GAME:
+      // Round 1
+      if (currentQuestionIdx >= QUESTIONS_PER_ROUND) {
+         myDFPlayer.playFolder(F_GRADE1, 15); // Cierre Drill
+         waitAudio(true);
+         currentState = ST_G1_MENU;
+         break;
+      }
+      
+      {
+         int realIdx = drillIndices[currentQuestionIdx];
+         Question q = questionsDrill[realIdx];
+         // Check if this is the last question of the round
+         bool isLast = (currentQuestionIdx == QUESTIONS_PER_ROUND - 1);
          
-         if (inputBuffer == correctAnswer) {
-            // CORRECTO
-            Serial.println("Correcto!");
+         Serial.print("Drill Q: "); Serial.println(q.fileNum);
+         myDFPlayer.playFolder(F_GRADE1, q.fileNum);
+         waitAudio(true);
+         
+         bool answered = false;
+         while(!answered) {
+            char k = customKeypad.getKey();
+            if (k == 'D') resetFunc();
             
-            Serial.println("DEBUG: Reproduciendo Exito...");
-            myDFPlayer.playFolder(F_RESPUESTAS, A_EXITO_FX);
-            codigoParaMaster = 2; // Feliz
-            waitAudio(false); // NO HABLAR (Solo SFX)
-            
-            Serial.println("DEBUG: Reproduciendo Muy Bien...");
-            myDFPlayer.playFolder(F_RESPUESTAS, A_MUY_BIEN);
-            waitAudio(true); // SI HABLAR
-            
-            codigoParaMaster = 0; 
-            currentState = nextState;
-            
-         } else {
-            // INCORRECTO
-            Serial.println("Incorrecto!");
-            
-            Serial.println("DEBUG: Reproduciendo Error...");
-            myDFPlayer.playFolder(F_RESPUESTAS, A_INCORRECTO_FX);
-            codigoParaMaster = 1; // Triste
-            waitAudio(false); // NO HABLAR (Solo SFX)
-            
-            Serial.println("DEBUG: Reproduciendo Explicacion...");
-            myDFPlayer.playFolder(F_RESPUESTAS, explanationAudio);
-            waitAudio(true); // SI HABLAR
-            
-            // Avanzar aunque falló (regla definida previamente)
-            codigoParaMaster = 0; 
-            currentState = nextState;
+            if (k >= '0' && k <= '9') {
+               if (k == q.correctAnswer) {
+                  playFeedback(true, isLast);
+               } else {
+                  handleErrorFlow(isLast);
+               }
+               answered = true;
+            }
          }
-         
-         // Limpiar buffer por si acaso (aunque cambiamos de estado)
-         inputBuffer = "";
-       }
-    }
-    // Ignoramos '#' aquí, ya que es auto-validación
+         currentQuestionIdx++;
+      }
+      break;
+      
+    case ST_G1_MENU:
+      Serial.println("--- MENU ---");
+      myDFPlayer.playFolder(F_GRADE1, A_G1_MENU);
+      waitAudio(true);
+      
+      while(true) {
+        char k = customKeypad.getKey();
+        if (k == 'D') resetFunc();
+        
+        if(k == '1') {
+          currentQuestionIdx = 0;
+          currentState = ST_G1_SM_GAME;
+          myDFPlayer.playFolder(F_GRADE1, 17); // Intro SM
+          waitAudio(true);
+          break;
+        } else if (k == '2') {
+          currentQuestionIdx = 0;
+          currentState = ST_G1_VF_GAME;
+          myDFPlayer.playFolder(F_GRADE1, 28); // Intro VF
+          waitAudio(true);
+          break;
+        }
+      }
+      break;
+      
+    case ST_G1_SM_GAME:
+      // Round 2 (SM)
+      if (currentQuestionIdx >= QUESTIONS_PER_ROUND) {
+         playFarewell();
+         currentState = ST_IDLE; 
+         break;
+      }
+      
+      {
+        int realIdx = smIndices[currentQuestionIdx];
+        Question q = questionsSM[realIdx];
+        bool isLast = (currentQuestionIdx == QUESTIONS_PER_ROUND - 1);
+        
+        Serial.print("SM Q: "); Serial.println(q.fileNum);
+        myDFPlayer.playFolder(F_GRADE1, q.fileNum);
+        waitAudio(true);
+        
+        bool answered = false;
+        while(!answered) {
+           char k = customKeypad.getKey();
+           if (k == 'D') resetFunc();
+           
+           if (k == 'A' || k == 'B') {
+              if (k == q.correctAnswer) playFeedback(true, isLast);
+              else handleErrorFlow(isLast);
+              answered = true;
+           }
+        }
+        currentQuestionIdx++;
+      }
+      break;
+      
+    case ST_G1_VF_GAME:
+      // Round 2 (VF)
+      if (currentQuestionIdx >= QUESTIONS_PER_ROUND) {
+         playFarewell();
+         currentState = ST_IDLE; 
+         break;
+      }
+      
+      {
+        int realIdx = vfIndices[currentQuestionIdx];
+        Question q = questionsVF[realIdx];
+        bool isLast = (currentQuestionIdx == QUESTIONS_PER_ROUND - 1);
+        
+        Serial.print("VF Q: "); Serial.println(q.fileNum);
+        myDFPlayer.playFolder(F_GRADE1, q.fileNum);
+        waitAudio(true);
+        
+        bool answered = false;
+        while(!answered) {
+           char k = customKeypad.getKey();
+           if (k == 'D') resetFunc();
+           
+           if (k == '1' || k == '2') {
+              if (k == q.correctAnswer) playFeedback(true, isLast);
+              else handleErrorFlow(isLast);
+              answered = true;
+           }
+        }
+        currentQuestionIdx++;
+      }
+      break;
+      
+    case ST_IDLE:
+      // Robot Sleeps. Waiting for 'D' (Reset).
+      break;
   }
-}
-
-void requestEvent() {
-  Wire.write(codigoParaMaster);
 }
