@@ -49,6 +49,11 @@ const int MASTER_TALK    = 20;
 
 int codigoParaMaster = MASTER_NEUTRAL; 
 
+// NAVIGATION CODES
+const int NAV_NONE = 0;
+const int NAV_NEXT = 999;
+const int NAV_PREV = -999;
+
 // ==========================================
 // DATOS DE JUEGOS
 // ==========================================
@@ -136,23 +141,33 @@ void requestEvent() {
   Wire.write(codigoParaMaster);
 }
 
-// STANDARD RELIABLE WAIT
-void waitAudio(bool talks) {
+// Returns NAV_NEXT, NAV_PREV, or NAV_NONE
+int waitAudio(bool talks) {
   if(talks) codigoParaMaster = MASTER_TALK;
   else codigoParaMaster = MASTER_NEUTRAL;
   
   unsigned long t = millis();
   
-  // 1. Wait for START (BUSY goes LOW) - Timeout 2.5s
-  while(digitalRead(PIN_BUSY) == HIGH && millis() - t < 2500) delay(10);
+  // 1. Wait for START (BUSY goes LOW)
+  while(digitalRead(PIN_BUSY) == HIGH && millis() - t < 2500) {
+     char k = customKeypad.getKey();
+     if (k == '#') { myDFPlayer.stop(); return NAV_NEXT; }
+     if (k == '*') { myDFPlayer.stop(); return NAV_PREV; }
+     if (k == 'D') resetFunc();
+     delay(10);
+  }
   
-  // 2. Wait for END (BUSY goes HIGH) - Debounce 200ms
-  // Keeps it simple: If HIGH for >200ms, it's done. 
+  // 2. Wait for END (BUSY goes HIGH)
   unsigned long highStart = 0;
   while(true) {
+     char k = customKeypad.getKey();
+     if (k == '#') { myDFPlayer.stop(); return NAV_NEXT; }
+     if (k == '*') { myDFPlayer.stop(); return NAV_PREV; }
+     if (k == 'D') resetFunc();
+     
      if (digitalRead(PIN_BUSY) == HIGH) {
         if (highStart == 0) highStart = millis();
-        if (millis() - highStart > 200) break; // 200ms Stable High
+        if (millis() - highStart > 200) break; // 200ms debounce
      } else {
         highStart = 0; 
      }
@@ -160,14 +175,24 @@ void waitAudio(bool talks) {
   }
   
   codigoParaMaster = MASTER_NEUTRAL;
-  delay(300); // Small pause for flow
+  delay(300); 
+  return NAV_NONE;
 }
 
-void playFolderSafe(int folder, int file, bool talks) {
-  // Simple Direct Play with small headstart
+int playFolderSafe(int folder, int file, bool talks) {
   myDFPlayer.playFolder(folder, file);
-  delay(500); // 500ms guaranteed blind wait to catch start
-  waitAudio(talks);
+  
+  // Blind wait but checking keys
+  unsigned long t = millis();
+  while(millis() - t < 500) {
+     char k = customKeypad.getKey();
+     if (k == '#') { myDFPlayer.stop(); return NAV_NEXT; }
+     if (k == '*') { myDFPlayer.stop(); return NAV_PREV; }
+     if (k == 'D') resetFunc();
+     delay(10);
+  }
+  
+  return waitAudio(talks);
 }
 
 void playFeedback(bool correct, bool isLast) {
@@ -201,29 +226,25 @@ void playFarewell() {
 }
 
 void handleErrorFlow(bool isLast) {
+  // Feedback first - We don't skip Feedback/Refusal usually, but we could check.
   playFeedback(false, isLast); 
   
-  if (selectedGrade == 3) {
-     playFolderSafe(F_GRADE3, 35, true);
-  } else {
-     playFolderSafe(F_GRADE1, A_G1_ERROR_MENU, true);
-  }
+  int res;
+  if (selectedGrade == 3) res = playFolderSafe(F_GRADE3, 35, true);
+  else res = playFolderSafe(F_GRADE1, A_G1_ERROR_MENU, true);
+  
+  if (res != NAV_NONE) return; // Allow skipping error msg
   
   char key = 0;
   while(true) {
     key = customKeypad.getKey();
     if (key == 'D') resetFunc(); 
     
-    if (key == '1') {
-       return;
-    } else if (key == '2') {
-       if (selectedGrade == 1) {
-          playFolderSafe(F_GRADE1, A_G1_EXPLAIN_RETRY, true);
-       } else if (selectedGrade == 2) {
-          playFolderSafe(F_GRADE2, 12, true); 
-       } else {
-          playFolderSafe(F_GRADE3, 12, true);
-       }
+    if (key == '1') return;
+    if (key == '2') {
+       if (selectedGrade == 1) playFolderSafe(F_GRADE1, A_G1_EXPLAIN_RETRY, true);
+       else if (selectedGrade == 2) playFolderSafe(F_GRADE2, 12, true); 
+       else playFolderSafe(F_GRADE3, 12, true);
        return; 
     }
   }
@@ -250,6 +271,7 @@ int getGradeFolder() {
   return F_GRADE1;
 }
 
+// Returns User Answer OR NAV_NEXT/NAV_PREV
 int waitAnswerLogic(int expected) {
    int digitsNeeded = (expected >= 10) ? 2 : 1;
    
@@ -257,6 +279,9 @@ int waitAnswerLogic(int expected) {
       while(true) {
          char k = customKeypad.getKey();
          if (k == 'D') resetFunc();
+         if (k == '#') return NAV_NEXT;
+         if (k == '*') return NAV_PREV;
+         
          if (k) {
             if (k >= '0' && k <= '9') return k - '0';
             if (k == 'A') return 1; 
@@ -265,17 +290,25 @@ int waitAnswerLogic(int expected) {
       }
    } else {
       int val = 0;
+      // Digit 1
       while(true) {
          char k = customKeypad.getKey();
          if (k == 'D') resetFunc();
+         if (k == '#') return NAV_NEXT;
+         if (k == '*') return NAV_PREV;
+         
          if (k >= '0' && k <= '9') {
             val = (k - '0') * 10;
             break; 
          }
       }
+      // Digit 2
       while(true) {
          char k = customKeypad.getKey();
          if (k == 'D') resetFunc();
+         if (k == '#') return NAV_NEXT; // Cancel and Next
+         if (k == '*') return NAV_PREV; // Cancel and Prev
+         
          if (k >= '0' && k <= '9') {
             val += (k - '0');
             break; 
@@ -292,7 +325,7 @@ int waitAnswerLogic(int expected) {
 void setup() {
   mySerial.begin(9600);
   Serial.begin(9600);
-  pinMode(PIN_BUSY, INPUT); // Revert to INPUT
+  pinMode(PIN_BUSY, INPUT); 
   randomSeed(analogRead(A1)); 
   
   Wire.begin(8);
@@ -301,7 +334,7 @@ void setup() {
   if (!myDFPlayer.begin(mySerial)) {
     Serial.println(F("Error DFPlayer"));
   }
-  myDFPlayer.volume(20); // LOWER VOLUME for stability
+  myDFPlayer.volume(20); 
   delay(3000); 
   
   currentState = ST_INTRO_SEQ;
@@ -318,11 +351,15 @@ void loop() {
       resetFunc(); 
   }
 
+  // Common Nav check not needed here as loops handle it
+  
   switch(currentState) {
     
     case ST_INTRO_SEQ:
       Serial.println("--- INTRO ---");
-      playFolderSafe(F_INTRO, 1, true);
+      // Allow skipping Intro? Sure -> but where to? To Grade Select.
+      if (playFolderSafe(F_INTRO, 1, true) == NAV_NEXT) { /* Just proceed */ }
+      
       Serial.println("Waiting for Grade (1, 2, 3)...");
       currentState = ST_WAIT_GRADE_SELECT;
       break;
@@ -338,6 +375,7 @@ void loop() {
       break;
 
     case ST_GRADE_INTRO:
+       // Linear Intro - If # pressed, skip current track. If * pressed, also skip (go back not supported widely here)
        // 1. Grade Intro
        playFolderSafe(getGradeFolder(), 1, true);
 
@@ -357,9 +395,7 @@ void loop() {
          while(waiting) {
            char k = customKeypad.getKey();
            if (k == 'D') resetFunc();
-           if (k == '1') {
-              waiting = false;
-           }
+           if (k == '1' || k == '#') waiting = false; // # also continues
          }
        }
 
@@ -389,9 +425,27 @@ void loop() {
          int folder = getGradeFolder();
          
          Serial.print("Drill Q: "); Serial.println(q.fileNum);
-         playFolderSafe(folder, q.fileNum, true);
+         int nav = playFolderSafe(folder, q.fileNum, true);
+         
+         if (nav == NAV_NEXT) {
+             currentQuestionIdx++;
+             return; // Fixed continue -> return
+         }
+         if (nav == NAV_PREV) {
+             if (currentQuestionIdx > 0) currentQuestionIdx--;
+             return; // Fixed continue -> return
+         }
          
          int userAns = waitAnswerLogic(q.correctAnswer);
+         
+         if (userAns == NAV_NEXT) {
+             currentQuestionIdx++;
+             return; // Fixed continue -> return
+         }
+         if (userAns == NAV_PREV) {
+             if (currentQuestionIdx > 0) currentQuestionIdx--;
+             return; // Fixed continue -> return
+         }
          
          if (userAns == q.correctAnswer) {
              playFeedback(true, isLast);
@@ -458,9 +512,14 @@ void loop() {
         int folder = getGradeFolder();
         
         Serial.print("SM Q: "); Serial.println(q.fileNum);
-        playFolderSafe(folder, q.fileNum, true);
+        int nav = playFolderSafe(folder, q.fileNum, true);
+        
+        if (nav == NAV_NEXT) { currentQuestionIdx++; return; } // Fixed continue -> return
+        if (nav == NAV_PREV) { if(currentQuestionIdx>0) currentQuestionIdx--; return; } // Fixed
         
         int userAns = waitAnswerLogic(q.correctAnswer);
+        if (userAns == NAV_NEXT) { currentQuestionIdx++; return; } // Fixed
+        if (userAns == NAV_PREV) { if(currentQuestionIdx>0) currentQuestionIdx--; return; } // Fixed
         
         if (userAns == q.correctAnswer) {
            playFeedback(true, isLast);
@@ -489,9 +548,14 @@ void loop() {
         int folder = getGradeFolder();
         
         Serial.print("VF/SD Q: "); Serial.println(q.fileNum);
-        playFolderSafe(folder, q.fileNum, true);
+        int nav = playFolderSafe(folder, q.fileNum, true);
+        
+        if (nav == NAV_NEXT) { currentQuestionIdx++; return; } // Fixed
+        if (nav == NAV_PREV) { if(currentQuestionIdx>0) currentQuestionIdx--; return; } // Fixed
         
         int userAns = waitAnswerLogic(q.correctAnswer);
+        if (userAns == NAV_NEXT) { currentQuestionIdx++; return; } // Fixed
+        if (userAns == NAV_PREV) { if(currentQuestionIdx>0) currentQuestionIdx--; return; } // Fixed
         
         if (userAns == q.correctAnswer) {
            playFeedback(true, isLast);
