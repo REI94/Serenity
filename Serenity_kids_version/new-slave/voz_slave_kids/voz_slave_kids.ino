@@ -31,14 +31,15 @@ const int PIN_BUSY = 3;
 const int F_INTRO   = 10;   // Carpeta 10: Bienvenida
 const int F_GRADE1  = 1;    // Carpeta 01: Primer Grado
 const int F_GRADE2  = 2;    // Carpeta 02: Segundo Grado
+const int F_GRADE3  = 3;    // Carpeta 03: Tercer Grado
 const int F_FRASES  = 7;    // Frases Feedback
 const int F_DESPEDIDA = 8;  // Despedida
 
 // SFX FEEDBACK MAPPING
 const int F_CORRECTO   = 90; 
 const int F_INCORRECTO = 91; 
-const int A_G1_ERROR_MENU      = 39; // 039.mp3 (Error G1) -> Usaremos este como generico si aplica
-const int A_G1_EXPLAIN_RETRY   = 40; // 040.mp3 (Explicacion 2 G1) -> Veremos como manejar error en G2
+const int A_G1_ERROR_MENU      = 39; 
+const int A_G1_EXPLAIN_RETRY   = 40; 
 
 // CODIGOS PARA MASTER (I2C)
 const int MASTER_NEUTRAL = 0;
@@ -53,39 +54,51 @@ int codigoParaMaster = MASTER_NEUTRAL;
 // ==========================================
 struct Question {
   int fileNum;
-  char correctAnswer;
+  int correctAnswer; 
 };
 
 // === GRADE 1 DATA ===
 const int G1_DRILL_COUNT = 10;
 Question g1_drill[G1_DRILL_COUNT] = {
-   {3,'3'},{4,'4'},{7,'5'},{8,'4'},{9,'2'},{10,'3'},{11,'5'},{12,'6'},{13,'1'},{14,'2'}
+   {3,3},{4,4},{7,5},{8,4},{9,2},{10,3},{11,5},{12,6},{13,1},{14,2}
 };
-
 const int G1_SM_COUNT = 10;
 Question g1_sm[G1_SM_COUNT] = {
-  {18,'B'},{19,'A'},{20,'B'},{21,'B'},{22,'A'},{23,'B'},{24,'A'},{25,'A'},{26,'B'},{27,'A'}
+  {18,2},{19,1},{20,2},{21,2},{22,1},{23,2},{24,1},{25,1},{26,2},{27,1} 
 };
-
 const int G1_VF_COUNT = 10;
 Question g1_vf[G1_VF_COUNT] = {
-  {29,'2'},{30,'2'},{31,'1'},{32,'2'},{33,'2'},{34,'1'},{35,'1'},{36,'1'},{37,'2'},{38,'1'}
+  {29,2},{30,2},{31,1},{32,2},{33,2},{34,1},{35,1},{36,1},{37,2},{38,1}
 };
 
 // === GRADE 2 DATA ===
 const int G2_DRILL_COUNT = 10;
 Question g2_drill[G2_DRILL_COUNT] = {
-  {2,'1'},{3,'2'},{4,'1'},{5,'0'},{6,'0'},{7,'1'},{8,'3'},{9,'0'},{10,'1'},{11,'2'}
+  {2,1},{3,2},{4,1},{5,0},{6,0},{7,1},{8,3},{9,0},{10,1},{11,2}
 };
-
-const int G2_SM_COUNT = 9; // CSV has 013-021
+const int G2_SM_COUNT = 9; 
 Question g2_sm[G2_SM_COUNT] = {
-  {13,'A'},{14,'A'},{15,'A'},{16,'A'},{17,'A'},{18,'A'},{19,'B'},{20,'B'},{21,'A'}
+  {13,1},{14,1},{15,1},{16,1},{17,1},{18,1},{19,2},{20,2},{21,1}
+};
+const int G2_VF_COUNT = 10; 
+Question g2_vf[G2_VF_COUNT] = {
+  {22,2},{23,1},{24,1},{25,2},{26,1},{27,1},{28,2},{29,1},{30,1},{31,2}
 };
 
-const int G2_VF_COUNT = 10; // CSV has 022-031
-Question g2_vf[G2_VF_COUNT] = {
-  {22,'2'},{23,'1'},{24,'1'},{25,'2'},{26,'1'},{27,'1'},{28,'2'},{29,'1'},{30,'1'},{31,'2'}
+// === GRADE 3 DATA ===
+const int G3_DRILL_COUNT = 10;
+Question g3_drill[G3_DRILL_COUNT] = {
+  {2,2},{3,3},{4,6},{5,4},{6,1},{7,10},{8,8},{9,9},{10,0},{11,0} 
+};
+
+const int G3_SM_COUNT = 10;
+Question g3_sm[G3_SM_COUNT] = {
+  {14,2},{15,1},{16,2},{17,1},{18,2},{19,1},{20,2},{21,1},{22,1},{23,1}
+};
+
+const int G3_SD_COUNT = 10; 
+Question g3_sd[G3_SD_COUNT] = {
+  {25,14},{26,8},{27,9},{28,12},{29,8},{30,9},{31,15},{32,12},{33,14},{34,2}
 };
 
 
@@ -100,17 +113,17 @@ const int QUESTIONS_PER_ROUND = 5;
 enum State {
   ST_SETUP,
   ST_INTRO_SEQ,
-  ST_WAIT_GRADE_SELECT, // Nuevo estado
-  ST_GRADE_INTRO,       // Carga intro especifica
+  ST_WAIT_GRADE_SELECT,
+  ST_GRADE_INTRO,
   ST_DRILL_GAME, 
   ST_MENU,
   ST_SM_GAME,
-  ST_VF_GAME,
+  ST_VF_GAME, 
   ST_IDLE
 };
 
 State currentState = ST_SETUP;
-int selectedGrade = 1; // 1 or 2
+int selectedGrade = 1; 
 int currentQuestionIdx = 0;
 
 void(* resetFunc) (void) = 0;
@@ -123,13 +136,38 @@ void requestEvent() {
   Wire.write(codigoParaMaster);
 }
 
+// STANDARD RELIABLE WAIT
 void waitAudio(bool talks) {
   if(talks) codigoParaMaster = MASTER_TALK;
+  else codigoParaMaster = MASTER_NEUTRAL;
+  
   unsigned long t = millis();
-  while(digitalRead(PIN_BUSY) == HIGH && millis() - t < 1500) delay(10);
-  while(digitalRead(PIN_BUSY) == LOW) delay(10);
+  
+  // 1. Wait for START (BUSY goes LOW) - Timeout 2.5s
+  while(digitalRead(PIN_BUSY) == HIGH && millis() - t < 2500) delay(10);
+  
+  // 2. Wait for END (BUSY goes HIGH) - Debounce 200ms
+  // Keeps it simple: If HIGH for >200ms, it's done. 
+  unsigned long highStart = 0;
+  while(true) {
+     if (digitalRead(PIN_BUSY) == HIGH) {
+        if (highStart == 0) highStart = millis();
+        if (millis() - highStart > 200) break; // 200ms Stable High
+     } else {
+        highStart = 0; 
+     }
+     delay(10);
+  }
+  
   codigoParaMaster = MASTER_NEUTRAL;
-  delay(200); 
+  delay(300); // Small pause for flow
+}
+
+void playFolderSafe(int folder, int file, bool talks) {
+  // Simple Direct Play with small headstart
+  myDFPlayer.playFolder(folder, file);
+  delay(500); // 500ms guaranteed blind wait to catch start
+  waitAudio(talks);
 }
 
 void playFeedback(bool correct, bool isLast) {
@@ -139,8 +177,7 @@ void playFeedback(bool correct, bool isLast) {
     waitAudio(false); 
     if (!isLast) {
       int phrase = random(1, 10); 
-      myDFPlayer.playFolder(F_FRASES, phrase);
-      waitAudio(true); 
+      playFolderSafe(F_FRASES, phrase, true);
     } else {
       codigoParaMaster = MASTER_NEUTRAL;
     }
@@ -150,8 +187,7 @@ void playFeedback(bool correct, bool isLast) {
     waitAudio(false); 
     if (!isLast) {
       int phrase = random(10, 20); 
-      myDFPlayer.playFolder(F_FRASES, phrase);
-      waitAudio(true);
+      playFolderSafe(F_FRASES, phrase, true);
     } else {
       codigoParaMaster = MASTER_NEUTRAL;
     }
@@ -161,18 +197,17 @@ void playFeedback(bool correct, bool isLast) {
 void playFarewell() {
   Serial.println("--- FAREWELL ---");
   int bye = random(1, 9); 
-  myDFPlayer.playFolder(F_DESPEDIDA, bye);
-  waitAudio(true);
+  playFolderSafe(F_DESPEDIDA, bye, true);
 }
 
 void handleErrorFlow(bool isLast) {
   playFeedback(false, isLast); 
   
-  // Usamos el menu de error de G1 (039) como generico pq G2 no tiene.
-  // "Deseas avanzar (1) o explicar (2)?"
-  // folder: F_GRADE1 es 1.
-  myDFPlayer.playFolder(F_GRADE1, A_G1_ERROR_MENU);
-  waitAudio(true);
+  if (selectedGrade == 3) {
+     playFolderSafe(F_GRADE3, 35, true);
+  } else {
+     playFolderSafe(F_GRADE1, A_G1_ERROR_MENU, true);
+  }
   
   char key = 0;
   while(true) {
@@ -182,17 +217,12 @@ void handleErrorFlow(bool isLast) {
     if (key == '1') {
        return;
     } else if (key == '2') {
-       // Explicacion Rety.
-       // G1: 40. G2: ??? G2 does not have "Explicacion 2" in CSV logic.
-       // Fallback: Just skip for G2 or replay intro explanation?
-       // For now, only G1 has dedicated retry explanation.
        if (selectedGrade == 1) {
-          myDFPlayer.playFolder(F_GRADE1, A_G1_EXPLAIN_RETRY);
-          waitAudio(true);
+          playFolderSafe(F_GRADE1, A_G1_EXPLAIN_RETRY, true);
+       } else if (selectedGrade == 2) {
+          playFolderSafe(F_GRADE2, 12, true); 
        } else {
-          // G2: Play initial explanation again? (012)
-          myDFPlayer.playFolder(F_GRADE2, 12);
-          waitAudio(true);
+          playFolderSafe(F_GRADE3, 12, true);
        }
        return; 
     }
@@ -213,6 +243,48 @@ void prepareIndices(int count) {
   shuffleArray(activeIndices, count);
 }
 
+int getGradeFolder() {
+  if (selectedGrade == 1) return F_GRADE1;
+  if (selectedGrade == 2) return F_GRADE2;
+  if (selectedGrade == 3) return F_GRADE3;
+  return F_GRADE1;
+}
+
+int waitAnswerLogic(int expected) {
+   int digitsNeeded = (expected >= 10) ? 2 : 1;
+   
+   if (digitsNeeded == 1) {
+      while(true) {
+         char k = customKeypad.getKey();
+         if (k == 'D') resetFunc();
+         if (k) {
+            if (k >= '0' && k <= '9') return k - '0';
+            if (k == 'A') return 1; 
+            if (k == 'B') return 2; 
+         }
+      }
+   } else {
+      int val = 0;
+      while(true) {
+         char k = customKeypad.getKey();
+         if (k == 'D') resetFunc();
+         if (k >= '0' && k <= '9') {
+            val = (k - '0') * 10;
+            break; 
+         }
+      }
+      while(true) {
+         char k = customKeypad.getKey();
+         if (k == 'D') resetFunc();
+         if (k >= '0' && k <= '9') {
+            val += (k - '0');
+            break; 
+         }
+      }
+      return val;
+   }
+}
+
 // ==========================================
 // MAIN
 // ==========================================
@@ -220,7 +292,7 @@ void prepareIndices(int count) {
 void setup() {
   mySerial.begin(9600);
   Serial.begin(9600);
-  pinMode(PIN_BUSY, INPUT);
+  pinMode(PIN_BUSY, INPUT); // Revert to INPUT
   randomSeed(analogRead(A1)); 
   
   Wire.begin(8);
@@ -229,8 +301,8 @@ void setup() {
   if (!myDFPlayer.begin(mySerial)) {
     Serial.println(F("Error DFPlayer"));
   }
-  myDFPlayer.volume(25);
-  delay(3000);
+  myDFPlayer.volume(20); // LOWER VOLUME for stability
+  delay(3000); 
   
   currentState = ST_INTRO_SEQ;
 }
@@ -250,68 +322,50 @@ void loop() {
     
     case ST_INTRO_SEQ:
       Serial.println("--- INTRO ---");
-      // Reproducir File 1: Bienvenida + "Presiona grado"
-      myDFPlayer.playFolder(F_INTRO, 1);
-      waitAudio(true);
-      
-      Serial.println("Waiting for Grade (1 or 2)...");
+      playFolderSafe(F_INTRO, 1, true);
+      Serial.println("Waiting for Grade (1, 2, 3)...");
       currentState = ST_WAIT_GRADE_SELECT;
       break;
 
     case ST_WAIT_GRADE_SELECT:
-      if (key == '1') {
-        selectedGrade = 1;
-        Serial.println("Selected Grade 1");
-        // Play "Excelente" (Folder 10, File 2)
-        myDFPlayer.playFolder(F_INTRO, 2);
-        waitAudio(true);
-        currentState = ST_GRADE_INTRO;
-      } else if (key == '2') {
-        selectedGrade = 2;
-        Serial.println("Selected Grade 2");
-         // Play "Excelente"
-        myDFPlayer.playFolder(F_INTRO, 2);
-        waitAudio(true);
+      if (key == '1' || key == '2' || key == '3') {
+        selectedGrade = key - '0';
+        Serial.print("Selected Grade: "); Serial.println(selectedGrade);
+        
+        playFolderSafe(F_INTRO, 2, true);
         currentState = ST_GRADE_INTRO;
       }
       break;
 
     case ST_GRADE_INTRO:
-       // 1. Play Grade Intro
-       // G1: 001. G2: 001.
-       int f_grade;
-       if (selectedGrade==1) f_grade = F_GRADE1; else f_grade = F_GRADE2;
+       // 1. Grade Intro
+       playFolderSafe(getGradeFolder(), 1, true);
 
-       myDFPlayer.playFolder(f_grade, 1);
-       waitAudio(true);
+       // 2. Generic Intro
+       playFolderSafe(F_INTRO, 3, true);
 
-       // 2. Play Generic "Comencemos calentar" (F10 - 003)
-       myDFPlayer.playFolder(F_INTRO, 3);
-       waitAudio(true);
+       // 3. Explanation
+       if (selectedGrade == 1) playFolderSafe(F_GRADE1, 2, true);
+       else if (selectedGrade == 2) playFolderSafe(F_GRADE2, 12, true);
+       else playFolderSafe(F_GRADE3, 12, true);
 
-       // 3. Play Explanations
-       // G1: 002. G2: 012.
-       if (selectedGrade == 1) myDFPlayer.playFolder(F_GRADE1, 2);
-       else myDFPlayer.playFolder(F_GRADE2, 12);
-       waitAudio(true);
-
-       // 4. Play "Presiona 1 para continuar" (F10 - 004)
-       myDFPlayer.playFolder(F_INTRO, 4);
-       waitAudio(true);
+       // 4. Press 1
+       playFolderSafe(F_INTRO, 4, true);
        
-       // Wait for '1'
        {
          bool waiting = true;
          while(waiting) {
            char k = customKeypad.getKey();
            if (k == 'D') resetFunc();
-           if (k == '1') waiting = false;
+           if (k == '1') {
+              waiting = false;
+           }
          }
        }
 
-       // Setup Drill
        if (selectedGrade == 1) prepareIndices(G1_DRILL_COUNT);
-       else prepareIndices(G2_DRILL_COUNT);
+       else if (selectedGrade == 2) prepareIndices(G2_DRILL_COUNT);
+       else prepareIndices(G3_DRILL_COUNT);
        
        currentQuestionIdx = 0;
        currentState = ST_DRILL_GAME;
@@ -319,9 +373,7 @@ void loop() {
    
    case ST_DRILL_GAME:
       if (currentQuestionIdx >= QUESTIONS_PER_ROUND) {
-         // Cierre: Usar G1/15 ("Hemos terminado...") para ambos, as requested/implied
-         myDFPlayer.playFolder(F_GRADE1, 15); 
-         waitAudio(true);
+         playFolderSafe(F_GRADE1, 15, true); 
          currentState = ST_MENU;
          break;
       }
@@ -329,29 +381,22 @@ void loop() {
       {
          int realIdx = activeIndices[currentQuestionIdx];
          Question q;
-         int f_grade = (selectedGrade==1) ? F_GRADE1 : F_GRADE2;
          if (selectedGrade==1) q = g1_drill[realIdx];
-         else q = g2_drill[realIdx];
+         else if (selectedGrade==2) q = g2_drill[realIdx];
+         else q = g3_drill[realIdx];
 
          bool isLast = (currentQuestionIdx == QUESTIONS_PER_ROUND - 1);
+         int folder = getGradeFolder();
          
          Serial.print("Drill Q: "); Serial.println(q.fileNum);
-         myDFPlayer.playFolder(f_grade, q.fileNum);
-         waitAudio(true);
+         playFolderSafe(folder, q.fileNum, true);
          
-         bool answered = false;
-         while(!answered) {
-            char k = customKeypad.getKey();
-            if (k == 'D') resetFunc();
-            
-            if (k >= '0' && k <= '9') {
-               if (k == q.correctAnswer) {
-                  playFeedback(true, isLast);
-               } else {
-                  handleErrorFlow(isLast);
-               }
-               answered = true;
-            }
+         int userAns = waitAnswerLogic(q.correctAnswer);
+         
+         if (userAns == q.correctAnswer) {
+             playFeedback(true, isLast);
+         } else {
+             handleErrorFlow(isLast);
          }
          currentQuestionIdx++;
       }
@@ -359,40 +404,37 @@ void loop() {
       
     case ST_MENU:
       Serial.println("--- MENU ---");
-      // Menu G1/16 ("Presiona 1 SM, 2 VF") generico para ambos
-      myDFPlayer.playFolder(F_GRADE1, 16);
-      waitAudio(true);
+      if (selectedGrade == 3) playFolderSafe(F_GRADE3, 13, true);
+      else playFolderSafe(F_GRADE1, 16, true);
       
       while(true) {
         char k = customKeypad.getKey();
         if (k == 'D') resetFunc();
         
         if(k == '1') {
-          // SM
           if(selectedGrade == 1) prepareIndices(G1_SM_COUNT);
-          else prepareIndices(G2_SM_COUNT);
+          else if(selectedGrade == 2) prepareIndices(G2_SM_COUNT);
+          else prepareIndices(G3_SM_COUNT);
           
-          // Intro: G1/17 (SM Explicacion). Usar G1 para G2 tambien si no hay otro?
-          // G1 CSV: 17 "Explicacion Dinamica SM". 
-          // G2 CSV: No explicacion. Starts 013.
-          // Usaremos G1/17 para ambos.
-          myDFPlayer.playFolder(F_GRADE1, 17);
-          waitAudio(true);
+          if (selectedGrade != 3) playFolderSafe(F_GRADE1, 17, true);
+          else playFolderSafe(F_GRADE1, 17, true); 
           
           currentQuestionIdx = 0;
           currentState = ST_SM_GAME;
           break;
         } else if (k == '2') {
-          // VF
           if(selectedGrade == 1) prepareIndices(G1_VF_COUNT);
-          else prepareIndices(G2_VF_COUNT);
+          else if(selectedGrade == 2) prepareIndices(G2_VF_COUNT);
+          else prepareIndices(G3_SD_COUNT);
 
-          // Intro: G1/28 "Explicacion Dinamica VF".
-          myDFPlayer.playFolder(F_GRADE1, 28);
-          waitAudio(true);
+          if (selectedGrade == 3) {
+             playFolderSafe(F_GRADE3, 24, true);
+          } else {
+             playFolderSafe(F_GRADE1, 28, true);
+          }
 
           currentQuestionIdx = 0;
-          currentState = ST_VF_GAME;
+          currentState = ST_VF_GAME; 
           break;
         }
       }
@@ -408,26 +450,22 @@ void loop() {
       {
         int realIdx = activeIndices[currentQuestionIdx];
         Question q;
-        int f_grade = (selectedGrade==1) ? F_GRADE1 : F_GRADE2;
         if (selectedGrade==1) q = g1_sm[realIdx];
-        else q = g2_sm[realIdx];
+        else if (selectedGrade==2) q = g2_sm[realIdx];
+        else q = g3_sm[realIdx];
 
         bool isLast = (currentQuestionIdx == QUESTIONS_PER_ROUND - 1);
+        int folder = getGradeFolder();
         
         Serial.print("SM Q: "); Serial.println(q.fileNum);
-        myDFPlayer.playFolder(f_grade, q.fileNum);
-        waitAudio(true);
+        playFolderSafe(folder, q.fileNum, true);
         
-        bool answered = false;
-        while(!answered) {
-           char k = customKeypad.getKey();
-           if (k == 'D') resetFunc();
-           
-           if (k == 'A' || k == 'B') {
-              if (k == q.correctAnswer) playFeedback(true, isLast);
-              else handleErrorFlow(isLast);
-              answered = true;
-           }
+        int userAns = waitAnswerLogic(q.correctAnswer);
+        
+        if (userAns == q.correctAnswer) {
+           playFeedback(true, isLast);
+        } else {
+           handleErrorFlow(isLast);
         }
         currentQuestionIdx++;
       }
@@ -443,33 +481,28 @@ void loop() {
       {
         int realIdx = activeIndices[currentQuestionIdx];
         Question q;
-        int f_grade = (selectedGrade==1) ? F_GRADE1 : F_GRADE2;
         if (selectedGrade==1) q = g1_vf[realIdx];
-        else q = g2_vf[realIdx];
+        else if (selectedGrade==2) q = g2_vf[realIdx];
+        else q = g3_sd[realIdx]; 
 
         bool isLast = (currentQuestionIdx == QUESTIONS_PER_ROUND - 1);
+        int folder = getGradeFolder();
         
-        Serial.print("VF Q: "); Serial.println(q.fileNum);
-        myDFPlayer.playFolder(f_grade, q.fileNum);
-        waitAudio(true);
+        Serial.print("VF/SD Q: "); Serial.println(q.fileNum);
+        playFolderSafe(folder, q.fileNum, true);
         
-        bool answered = false;
-        while(!answered) {
-           char k = customKeypad.getKey();
-           if (k == 'D') resetFunc();
-           
-           if (k == '1' || k == '2') {
-              if (k == q.correctAnswer) playFeedback(true, isLast);
-              else handleErrorFlow(isLast);
-              answered = true;
-           }
+        int userAns = waitAnswerLogic(q.correctAnswer);
+        
+        if (userAns == q.correctAnswer) {
+           playFeedback(true, isLast);
+        } else {
+           handleErrorFlow(isLast);
         }
         currentQuestionIdx++;
       }
       break;
       
     case ST_IDLE:
-      // Robot Sleeps. Waiting for 'D' (Reset).
       break;
   }
 }
