@@ -32,6 +32,7 @@ const int F_INTRO   = 10;   // Carpeta 10: Bienvenida
 const int F_GRADE1  = 1;    // Carpeta 01: Primer Grado
 const int F_GRADE2  = 2;    // Carpeta 02: Segundo Grado
 const int F_GRADE3  = 3;    // Carpeta 03: Tercer Grado
+const int F_GRADE4  = 4;    // Carpeta 04: Cuarto Grado
 const int F_FRASES  = 7;    // Frases Feedback
 const int F_DESPEDIDA = 8;  // Despedida
 
@@ -104,6 +105,23 @@ Question g3_sm[G3_SM_COUNT] = {
 const int G3_SD_COUNT = 10; 
 Question g3_sd[G3_SD_COUNT] = {
   {25,14},{26,8},{27,9},{28,12},{29,8},{30,9},{31,15},{32,12},{33,14},{34,2}
+};
+
+// === GRADE 4 DATA ===
+const int G4_DRILL_COUNT = 10;
+Question g4_drill[G4_DRILL_COUNT] = {
+  {2,12}, {3,20}, {4,45}, {5,100}, {6,88}, {7,99}, {8,70}, {9,84}, {10,0}, {11,0}
+};
+
+const int G4_SM_COUNT = 9;
+Question g4_sm[G4_SM_COUNT] = {
+  {13,1}, {14,2}, {15,1}, {16,2}, {17,1}, {18,2}, {19,1}, {20,1}, {21,1}
+  // 14 map to Option B (2) per user req. 
+};
+
+const int G4_SD_COUNT = 10;
+Question g4_sd[G4_SD_COUNT] = {
+  {22,42}, {23,88}, {24,60}, {25,26}, {26,40}, {27,45}, {28,75}, {29,40}, {30,0}, {31,90}
 };
 
 
@@ -234,6 +252,7 @@ void handleErrorFlow(bool isLast) {
   
   int res;
   if (selectedGrade == 3) res = playFolderSafe(F_GRADE3, 35, MASTER_TALK);
+  else if (selectedGrade == 4) res = playFolderSafe(F_GRADE4, 12, MASTER_TALK); // Usar Explicacion como fallback
   else res = playFolderSafe(F_GRADE1, A_G1_ERROR_MENU, MASTER_TALK);
   
   if (res != NAV_NONE) return; 
@@ -247,7 +266,8 @@ void handleErrorFlow(bool isLast) {
     if (key == '2') {
        if (selectedGrade == 1) playFolderSafe(F_GRADE1, A_G1_EXPLAIN_RETRY, MASTER_TALK);
        else if (selectedGrade == 2) playFolderSafe(F_GRADE2, 12, MASTER_TALK); 
-       else playFolderSafe(F_GRADE3, 12, MASTER_TALK);
+       else if (selectedGrade == 3) playFolderSafe(F_GRADE3, 12, MASTER_TALK);
+       else playFolderSafe(F_GRADE4, 12, MASTER_TALK);
        return; 
     }
   }
@@ -271,11 +291,14 @@ int getGradeFolder() {
   if (selectedGrade == 1) return F_GRADE1;
   if (selectedGrade == 2) return F_GRADE2;
   if (selectedGrade == 3) return F_GRADE3;
+  if (selectedGrade == 4) return F_GRADE4;
   return F_GRADE1;
 }
 
 int waitAnswerLogic(int expected) {
-   int digitsNeeded = (expected >= 10) ? 2 : 1;
+   int digitsNeeded = 1;
+   if (expected >= 100) digitsNeeded = 3;
+   else if (expected >= 10) digitsNeeded = 2;
    
    if (digitsNeeded == 1) {
       while(true) {
@@ -290,8 +313,9 @@ int waitAnswerLogic(int expected) {
             if (k == 'B') return 2; 
          }
       }
-   } else {
+   } else if (digitsNeeded == 2) {
       int val = 0;
+      // Digit 1
       while(true) {
          char k = customKeypad.getKey();
          if (k == 'D') resetFunc();
@@ -303,6 +327,7 @@ int waitAnswerLogic(int expected) {
             break; 
          }
       }
+      // Digit 2
       while(true) {
          char k = customKeypad.getKey();
          if (k == 'D') resetFunc();
@@ -313,6 +338,34 @@ int waitAnswerLogic(int expected) {
             val += (k - '0');
             break; 
          }
+      }
+      return val;
+   } else {
+      // 3 Digits (Example: 100)
+      int val = 0;
+      // Digit 1
+      while(true) {
+         char k = customKeypad.getKey();
+         if (k == 'D') resetFunc();
+         if (k == '#') return NAV_NEXT;
+         if (k == '*') return NAV_PREV;
+         if (k >= '0' && k <= '9') { val = (k - '0') * 100; break; }
+      }
+      // Digit 2
+      while(true) {
+         char k = customKeypad.getKey();
+         if (k == 'D') resetFunc();
+         if (k == '#') return NAV_NEXT;
+         if (k == '*') return NAV_PREV;
+         if (k >= '0' && k <= '9') { val += (k - '0') * 10; break; }
+      }
+      // Digit 3
+      while(true) {
+         char k = customKeypad.getKey();
+         if (k == 'D') resetFunc();
+         if (k == '#') return NAV_NEXT;
+         if (k == '*') return NAV_PREV;
+         if (k >= '0' && k <= '9') { val += (k - '0'); break; }
       }
       return val;
    }
@@ -359,12 +412,12 @@ void loop() {
       Serial.println("--- INTRO ---");
       if (playFolderSafe(F_INTRO, 1, MASTER_TALK) == NAV_NEXT) { /* Next */ }
       
-      Serial.println("Waiting for Grade (1, 2, 3)...");
+      Serial.println("Waiting for Grade (1, 2, 3, 4)...");
       currentState = ST_WAIT_GRADE_SELECT;
       break;
 
     case ST_WAIT_GRADE_SELECT:
-      if (key == '1' || key == '2' || key == '3') {
+      if (key == '1' || key == '2' || key == '3' || key == '4') {
         selectedGrade = key - '0';
         Serial.print("Selected Grade: "); Serial.println(selectedGrade);
         
@@ -383,7 +436,8 @@ void loop() {
        // 3. Explanation
        if (selectedGrade == 1) playFolderSafe(F_GRADE1, 2, MASTER_TALK);
        else if (selectedGrade == 2) playFolderSafe(F_GRADE2, 12, MASTER_TALK);
-       else playFolderSafe(F_GRADE3, 12, MASTER_TALK);
+       else if (selectedGrade == 3) playFolderSafe(F_GRADE3, 12, MASTER_TALK);
+       else playFolderSafe(F_GRADE4, 12, MASTER_TALK);
 
        // 4. Press 1
        playFolderSafe(F_INTRO, 4, MASTER_TALK);
@@ -399,7 +453,8 @@ void loop() {
 
        if (selectedGrade == 1) prepareIndices(G1_DRILL_COUNT);
        else if (selectedGrade == 2) prepareIndices(G2_DRILL_COUNT);
-       else prepareIndices(G3_DRILL_COUNT);
+       else if (selectedGrade == 3) prepareIndices(G3_DRILL_COUNT);
+       else prepareIndices(G4_DRILL_COUNT);
        
        currentQuestionIdx = 0;
        currentState = ST_DRILL_GAME;
@@ -417,7 +472,8 @@ void loop() {
          Question q;
          if (selectedGrade==1) q = g1_drill[realIdx];
          else if (selectedGrade==2) q = g2_drill[realIdx];
-         else q = g3_drill[realIdx];
+         else if (selectedGrade==3) q = g3_drill[realIdx];
+         else q = g4_drill[realIdx];
 
          bool isLast = (currentQuestionIdx == QUESTIONS_PER_ROUND - 1);
          int folder = getGradeFolder();
@@ -445,6 +501,14 @@ void loop() {
     case ST_MENU:
       Serial.println("--- MENU ---");
       if (selectedGrade == 3) playFolderSafe(F_GRADE3, 13, MASTER_TALK);
+      else if (selectedGrade == 4) playFolderSafe(F_GRADE4, 13, MASTER_TALK); // Using F04/13 as Menu Prompt? (Check CSV)
+      // CSV 13 is "Selection Multiple Question 1" actually... 
+      // Grade 3 used F03/13 "Explanation". 
+      // Grade 4 doesn't have a specific "Menu" prompt listed in CSV 
+      // We will re-use Grade 3's menu prompt logic if file missing or reuse Grade 1 generic.
+      // Actually CSV says 04_13 is "Cuarto grado: Pregunta - SM". 
+      // The flow expects a "Select Game" prompt. 
+      // For now, let's use F_GRADE1, 16 (Generic "Elige un juego") for G4 too.
       else playFolderSafe(F_GRADE1, 16, MASTER_TALK);
       
       while(true) {
@@ -454,10 +518,12 @@ void loop() {
         if(k == '1') {
           if(selectedGrade == 1) prepareIndices(G1_SM_COUNT);
           else if(selectedGrade == 2) prepareIndices(G2_SM_COUNT);
-          else prepareIndices(G3_SM_COUNT);
+          else if(selectedGrade == 3) prepareIndices(G3_SM_COUNT);
+          else prepareIndices(G4_SM_COUNT);
           
-          if (selectedGrade != 3) playFolderSafe(F_GRADE1, 17, MASTER_TALK);
-          else playFolderSafe(F_GRADE1, 17, MASTER_TALK); 
+          if (selectedGrade != 3 && selectedGrade != 4) playFolderSafe(F_GRADE1, 17, MASTER_TALK);
+          else if (selectedGrade == 3) playFolderSafe(F_GRADE1, 17, MASTER_TALK);
+          else playFolderSafe(F_GRADE1, 17, MASTER_TALK); // Generic "Vamos a jugar SM"
           
           currentQuestionIdx = 0;
           currentState = ST_SM_GAME;
@@ -465,16 +531,26 @@ void loop() {
         } else if (k == '2') {
           if(selectedGrade == 1) prepareIndices(G1_VF_COUNT);
           else if(selectedGrade == 2) prepareIndices(G2_VF_COUNT);
-          else prepareIndices(G3_SD_COUNT);
+          else if(selectedGrade == 3) prepareIndices(G3_SD_COUNT);
+          else prepareIndices(G4_SD_COUNT);
 
           if (selectedGrade == 3) {
              playFolderSafe(F_GRADE3, 24, MASTER_TALK);
+          } else if (selectedGrade == 4) {
+             playFolderSafe(F_GRADE4, 22, MASTER_TALK); // Fallback: First question of SD? 
+             // Or maybe generic. G4 CSV 022 is "Pregunta SD". 
+             // Let's just play nothing or generic intro? 
+             // Let's play G1/28 "Verdadero o Falso" or G1/something?
+             // Since G3 SD had a specific intro (F03/24), G4 SD (022) is a question.
+             // We will skip intro prompt for G4 SD for now or use G1 generic.
           } else {
              playFolderSafe(F_GRADE1, 28, MASTER_TALK);
           }
 
+          if (selectedGrade >= 3) currentState = ST_VF_GAME; // Reuse VF state for SD (Structure is same)
+          else currentState = ST_VF_GAME; 
+          
           currentQuestionIdx = 0;
-          currentState = ST_VF_GAME; 
           break;
         }
       }
@@ -492,7 +568,8 @@ void loop() {
         Question q;
         if (selectedGrade==1) q = g1_sm[realIdx];
         else if (selectedGrade==2) q = g2_sm[realIdx];
-        else q = g3_sm[realIdx];
+        else if (selectedGrade==3) q = g3_sm[realIdx];
+        else q = g4_sm[realIdx];
 
         bool isLast = (currentQuestionIdx == QUESTIONS_PER_ROUND - 1);
         int folder = getGradeFolder();
@@ -528,7 +605,8 @@ void loop() {
         Question q;
         if (selectedGrade==1) q = g1_vf[realIdx];
         else if (selectedGrade==2) q = g2_vf[realIdx];
-        else q = g3_sd[realIdx]; 
+        else if (selectedGrade==3) q = g3_sd[realIdx];
+        else q = g4_sd[realIdx];
 
         bool isLast = (currentQuestionIdx == QUESTIONS_PER_ROUND - 1);
         int folder = getGradeFolder();
