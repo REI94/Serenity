@@ -32,6 +32,9 @@ Servo servo_3;
 Servo servo_5;
 void(* resetFunc) (void) = 0; // Función de reset
 
+// Prototipos
+void brazosRepos();
+
 void setup() {
   Wire.begin();
   Serial.begin(9600);
@@ -43,8 +46,8 @@ void setup() {
   // Inicializar servos en posición neutral
   servo_3.attach(3, 500, 2500);
   servo_5.attach(5, 500, 2500);
-  servo_5.write(90);
-  servo_3.write(10); // Ajustado según código original
+  
+  brazosRepos(); // Set to correct rest position (S3=10, S5=90)
 
   eyes1(); // Ojos base
   mouthHap(); // Boca base
@@ -84,8 +87,8 @@ void loop() {
       case 2: // CORRECTO / FELIZ (Simple + Brazos)
         eyesHappy(); // Ojos ^ ^
         mouthHap();
-        brazosBaile(); // Animación nueva de brazos
-        // delay(1000); // Ya incluido en celebracionCorta
+        // brazosBaile(); // Animación anterior (Vibración?)
+        brazos2(); // Animación más amplia, rapida y con retorno
         break;
 
       case 3: // Celebración 1 (Brazo Der Arriba)
@@ -315,31 +318,54 @@ void mouthSad(){
 }
 
 // --- SERVOS ---
+
+void brazosRepos() {
+  // Posicion neutral/descanso definida por el usuario
+  servo_3.write(10);  // Brazo Der Abajo
+  servo_5.write(90);  // Brazo Izq Abajo
+}
+
 void brazos2(){
-  for (int angle = 0; angle <= 120; angle+=2) { // Incremento modificado para velocidad
-    servo_3.write(angle);
-    servo_5.write(120 - angle);
-    delay(15);
+  // MOVIMIENTO EXPANSIVO (CASI DOBLE DE RANGO)
+  // S3: 10 -> 160 (Rango 150)
+  // S5: 90 -> 170 (Rango 80? No, S5 parece invertido)
+  // Si 90 es reposo y 10 es "Atras", entonces 170 es "Adelante/Arriba"
+  
+  // Ida
+  for (int i=0; i<=150; i+=8) {
+      servo_3.write(10 + i);        // 10 -> 160
+      // S5: Si 90 es down, y 10 es back, vamos hacia 170?
+      // Probemos rango amplio en S5: 90 -> 160
+      // Nota: S5 90 + (i * 70 / 150)
+      servo_5.write(90 + (i * 70 / 150)); 
+      delay(6);
   }
-  delay(1000); // Pausa corta
-  for (int angle = 120; angle >= 0; angle-=2) {
-    servo_3.write(angle);
-    servo_5.write(120 - angle);
-    delay(15);
+  
+  delay(150); 
+  
+  // Vuelta
+  for (int i=150; i>=0; i-=8) {
+      servo_3.write(10 + i);
+      servo_5.write(90 + (i * 70 / 150));
+      delay(6);
   }
+  
+  brazosRepos();
 }
 
 void brazosBaile(){
-  for(int k=0; k<2; k++){ // Repetir baile 2 veces
+  // Mantenemos esta funcion por si se usa en code 5 (BAILE)
+  // Pero la aceleramos un poco
+  for(int k=0; k<2; k++){ 
     for (int angle = 0; angle <= 80; angle+=4) {
       servo_3.write(angle);
       servo_5.write(80 - angle);
-      delay(10);
+      delay(8);
     }
     for (int angle = 80; angle >= 0; angle-=4) {
       servo_3.write(angle);
       servo_5.write(80 - angle);
-      delay(10);
+      delay(8);
     }
   }
 }

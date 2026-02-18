@@ -141,10 +141,9 @@ void requestEvent() {
   Wire.write(codigoParaMaster);
 }
 
-// Returns NAV_NEXT, NAV_PREV, or NAV_NONE
-int waitAudio(bool talks) {
-  if(talks) codigoParaMaster = MASTER_TALK;
-  else codigoParaMaster = MASTER_NEUTRAL;
+// UPDATE: Takes INT STATUS to maintain on I2C
+int waitAudio(int status) {
+  codigoParaMaster = status;
   
   unsigned long t = millis();
   
@@ -179,7 +178,8 @@ int waitAudio(bool talks) {
   return NAV_NONE;
 }
 
-int playFolderSafe(int folder, int file, bool talks) {
+// UPDATE: Takes INT STATUS
+int playFolderSafe(int folder, int file, int status) {
   myDFPlayer.playFolder(folder, file);
   
   // Blind wait but checking keys
@@ -192,27 +192,31 @@ int playFolderSafe(int folder, int file, bool talks) {
      delay(10);
   }
   
-  return waitAudio(talks);
+  return waitAudio(status);
 }
 
 void playFeedback(bool correct, bool isLast) {
   if (correct) {
-    codigoParaMaster = MASTER_HAPPY;
+    // Send HAPPY status while playing SFX
     myDFPlayer.playFolder(F_CORRECTO, 1);
-    waitAudio(false); 
+    waitAudio(MASTER_HAPPY); 
+    
     if (!isLast) {
       int phrase = random(1, 10); 
-      playFolderSafe(F_FRASES, phrase, true);
+      // Send TALK status while phrases
+      playFolderSafe(F_FRASES, phrase, MASTER_TALK);
     } else {
       codigoParaMaster = MASTER_NEUTRAL;
     }
   } else {
-    codigoParaMaster = MASTER_SAD;
+    // Send SAD status while playing SFX
     myDFPlayer.playFolder(F_INCORRECTO, 1);
-    waitAudio(false); 
+    waitAudio(MASTER_SAD); 
+    
     if (!isLast) {
       int phrase = random(10, 20); 
-      playFolderSafe(F_FRASES, phrase, true);
+      // Send TALK status while phrases
+      playFolderSafe(F_FRASES, phrase, MASTER_TALK);
     } else {
       codigoParaMaster = MASTER_NEUTRAL;
     }
@@ -222,18 +226,17 @@ void playFeedback(bool correct, bool isLast) {
 void playFarewell() {
   Serial.println("--- FAREWELL ---");
   int bye = random(1, 9); 
-  playFolderSafe(F_DESPEDIDA, bye, true);
+  playFolderSafe(F_DESPEDIDA, bye, MASTER_TALK);
 }
 
 void handleErrorFlow(bool isLast) {
-  // Feedback first - We don't skip Feedback/Refusal usually, but we could check.
   playFeedback(false, isLast); 
   
   int res;
-  if (selectedGrade == 3) res = playFolderSafe(F_GRADE3, 35, true);
-  else res = playFolderSafe(F_GRADE1, A_G1_ERROR_MENU, true);
+  if (selectedGrade == 3) res = playFolderSafe(F_GRADE3, 35, MASTER_TALK);
+  else res = playFolderSafe(F_GRADE1, A_G1_ERROR_MENU, MASTER_TALK);
   
-  if (res != NAV_NONE) return; // Allow skipping error msg
+  if (res != NAV_NONE) return; 
   
   char key = 0;
   while(true) {
@@ -242,9 +245,9 @@ void handleErrorFlow(bool isLast) {
     
     if (key == '1') return;
     if (key == '2') {
-       if (selectedGrade == 1) playFolderSafe(F_GRADE1, A_G1_EXPLAIN_RETRY, true);
-       else if (selectedGrade == 2) playFolderSafe(F_GRADE2, 12, true); 
-       else playFolderSafe(F_GRADE3, 12, true);
+       if (selectedGrade == 1) playFolderSafe(F_GRADE1, A_G1_EXPLAIN_RETRY, MASTER_TALK);
+       else if (selectedGrade == 2) playFolderSafe(F_GRADE2, 12, MASTER_TALK); 
+       else playFolderSafe(F_GRADE3, 12, MASTER_TALK);
        return; 
     }
   }
@@ -271,7 +274,6 @@ int getGradeFolder() {
   return F_GRADE1;
 }
 
-// Returns User Answer OR NAV_NEXT/NAV_PREV
 int waitAnswerLogic(int expected) {
    int digitsNeeded = (expected >= 10) ? 2 : 1;
    
@@ -290,7 +292,6 @@ int waitAnswerLogic(int expected) {
       }
    } else {
       int val = 0;
-      // Digit 1
       while(true) {
          char k = customKeypad.getKey();
          if (k == 'D') resetFunc();
@@ -302,12 +303,11 @@ int waitAnswerLogic(int expected) {
             break; 
          }
       }
-      // Digit 2
       while(true) {
          char k = customKeypad.getKey();
          if (k == 'D') resetFunc();
-         if (k == '#') return NAV_NEXT; // Cancel and Next
-         if (k == '*') return NAV_PREV; // Cancel and Prev
+         if (k == '#') return NAV_NEXT; 
+         if (k == '*') return NAV_PREV; 
          
          if (k >= '0' && k <= '9') {
             val += (k - '0');
@@ -357,8 +357,7 @@ void loop() {
     
     case ST_INTRO_SEQ:
       Serial.println("--- INTRO ---");
-      // Allow skipping Intro? Sure -> but where to? To Grade Select.
-      if (playFolderSafe(F_INTRO, 1, true) == NAV_NEXT) { /* Just proceed */ }
+      if (playFolderSafe(F_INTRO, 1, MASTER_TALK) == NAV_NEXT) { /* Next */ }
       
       Serial.println("Waiting for Grade (1, 2, 3)...");
       currentState = ST_WAIT_GRADE_SELECT;
@@ -369,33 +368,32 @@ void loop() {
         selectedGrade = key - '0';
         Serial.print("Selected Grade: "); Serial.println(selectedGrade);
         
-        playFolderSafe(F_INTRO, 2, true);
+        playFolderSafe(F_INTRO, 2, MASTER_TALK);
         currentState = ST_GRADE_INTRO;
       }
       break;
 
     case ST_GRADE_INTRO:
-       // Linear Intro - If # pressed, skip current track. If * pressed, also skip (go back not supported widely here)
        // 1. Grade Intro
-       playFolderSafe(getGradeFolder(), 1, true);
+       playFolderSafe(getGradeFolder(), 1, MASTER_TALK);
 
        // 2. Generic Intro
-       playFolderSafe(F_INTRO, 3, true);
+       playFolderSafe(F_INTRO, 3, MASTER_TALK);
 
        // 3. Explanation
-       if (selectedGrade == 1) playFolderSafe(F_GRADE1, 2, true);
-       else if (selectedGrade == 2) playFolderSafe(F_GRADE2, 12, true);
-       else playFolderSafe(F_GRADE3, 12, true);
+       if (selectedGrade == 1) playFolderSafe(F_GRADE1, 2, MASTER_TALK);
+       else if (selectedGrade == 2) playFolderSafe(F_GRADE2, 12, MASTER_TALK);
+       else playFolderSafe(F_GRADE3, 12, MASTER_TALK);
 
        // 4. Press 1
-       playFolderSafe(F_INTRO, 4, true);
+       playFolderSafe(F_INTRO, 4, MASTER_TALK);
        
        {
          bool waiting = true;
          while(waiting) {
            char k = customKeypad.getKey();
            if (k == 'D') resetFunc();
-           if (k == '1' || k == '#') waiting = false; // # also continues
+           if (k == '1' || k == '#') waiting = false; 
          }
        }
 
@@ -409,7 +407,7 @@ void loop() {
    
    case ST_DRILL_GAME:
       if (currentQuestionIdx >= QUESTIONS_PER_ROUND) {
-         playFolderSafe(F_GRADE1, 15, true); 
+         playFolderSafe(F_GRADE1, 15, MASTER_TALK); 
          currentState = ST_MENU;
          break;
       }
@@ -425,27 +423,15 @@ void loop() {
          int folder = getGradeFolder();
          
          Serial.print("Drill Q: "); Serial.println(q.fileNum);
-         int nav = playFolderSafe(folder, q.fileNum, true);
+         int nav = playFolderSafe(folder, q.fileNum, MASTER_TALK);
          
-         if (nav == NAV_NEXT) {
-             currentQuestionIdx++;
-             return; // Fixed continue -> return
-         }
-         if (nav == NAV_PREV) {
-             if (currentQuestionIdx > 0) currentQuestionIdx--;
-             return; // Fixed continue -> return
-         }
+         if (nav == NAV_NEXT) { currentQuestionIdx++; return; }
+         if (nav == NAV_PREV) { if(currentQuestionIdx > 0) currentQuestionIdx--; return; }
          
          int userAns = waitAnswerLogic(q.correctAnswer);
          
-         if (userAns == NAV_NEXT) {
-             currentQuestionIdx++;
-             return; // Fixed continue -> return
-         }
-         if (userAns == NAV_PREV) {
-             if (currentQuestionIdx > 0) currentQuestionIdx--;
-             return; // Fixed continue -> return
-         }
+         if (userAns == NAV_NEXT) { currentQuestionIdx++; return; }
+         if (userAns == NAV_PREV) { if(currentQuestionIdx > 0) currentQuestionIdx--; return; }
          
          if (userAns == q.correctAnswer) {
              playFeedback(true, isLast);
@@ -458,8 +444,8 @@ void loop() {
       
     case ST_MENU:
       Serial.println("--- MENU ---");
-      if (selectedGrade == 3) playFolderSafe(F_GRADE3, 13, true);
-      else playFolderSafe(F_GRADE1, 16, true);
+      if (selectedGrade == 3) playFolderSafe(F_GRADE3, 13, MASTER_TALK);
+      else playFolderSafe(F_GRADE1, 16, MASTER_TALK);
       
       while(true) {
         char k = customKeypad.getKey();
@@ -470,8 +456,8 @@ void loop() {
           else if(selectedGrade == 2) prepareIndices(G2_SM_COUNT);
           else prepareIndices(G3_SM_COUNT);
           
-          if (selectedGrade != 3) playFolderSafe(F_GRADE1, 17, true);
-          else playFolderSafe(F_GRADE1, 17, true); 
+          if (selectedGrade != 3) playFolderSafe(F_GRADE1, 17, MASTER_TALK);
+          else playFolderSafe(F_GRADE1, 17, MASTER_TALK); 
           
           currentQuestionIdx = 0;
           currentState = ST_SM_GAME;
@@ -482,9 +468,9 @@ void loop() {
           else prepareIndices(G3_SD_COUNT);
 
           if (selectedGrade == 3) {
-             playFolderSafe(F_GRADE3, 24, true);
+             playFolderSafe(F_GRADE3, 24, MASTER_TALK);
           } else {
-             playFolderSafe(F_GRADE1, 28, true);
+             playFolderSafe(F_GRADE1, 28, MASTER_TALK);
           }
 
           currentQuestionIdx = 0;
@@ -512,14 +498,14 @@ void loop() {
         int folder = getGradeFolder();
         
         Serial.print("SM Q: "); Serial.println(q.fileNum);
-        int nav = playFolderSafe(folder, q.fileNum, true);
+        int nav = playFolderSafe(folder, q.fileNum, MASTER_TALK);
         
-        if (nav == NAV_NEXT) { currentQuestionIdx++; return; } // Fixed continue -> return
-        if (nav == NAV_PREV) { if(currentQuestionIdx>0) currentQuestionIdx--; return; } // Fixed
+        if (nav == NAV_NEXT) { currentQuestionIdx++; return; } 
+        if (nav == NAV_PREV) { if(currentQuestionIdx>0) currentQuestionIdx--; return; } 
         
         int userAns = waitAnswerLogic(q.correctAnswer);
-        if (userAns == NAV_NEXT) { currentQuestionIdx++; return; } // Fixed
-        if (userAns == NAV_PREV) { if(currentQuestionIdx>0) currentQuestionIdx--; return; } // Fixed
+        if (userAns == NAV_NEXT) { currentQuestionIdx++; return; } 
+        if (userAns == NAV_PREV) { if(currentQuestionIdx>0) currentQuestionIdx--; return; } 
         
         if (userAns == q.correctAnswer) {
            playFeedback(true, isLast);
@@ -548,14 +534,14 @@ void loop() {
         int folder = getGradeFolder();
         
         Serial.print("VF/SD Q: "); Serial.println(q.fileNum);
-        int nav = playFolderSafe(folder, q.fileNum, true);
+        int nav = playFolderSafe(folder, q.fileNum, MASTER_TALK);
         
-        if (nav == NAV_NEXT) { currentQuestionIdx++; return; } // Fixed
-        if (nav == NAV_PREV) { if(currentQuestionIdx>0) currentQuestionIdx--; return; } // Fixed
+        if (nav == NAV_NEXT) { currentQuestionIdx++; return; } 
+        if (nav == NAV_PREV) { if(currentQuestionIdx>0) currentQuestionIdx--; return; } 
         
         int userAns = waitAnswerLogic(q.correctAnswer);
-        if (userAns == NAV_NEXT) { currentQuestionIdx++; return; } // Fixed
-        if (userAns == NAV_PREV) { if(currentQuestionIdx>0) currentQuestionIdx--; return; } // Fixed
+        if (userAns == NAV_NEXT) { currentQuestionIdx++; return; } 
+        if (userAns == NAV_PREV) { if(currentQuestionIdx>0) currentQuestionIdx--; return; } 
         
         if (userAns == q.correctAnswer) {
            playFeedback(true, isLast);
