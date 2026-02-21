@@ -88,7 +88,7 @@ void loop() {
         eyesHappy(); // Ojos ^ ^
         mouthHap();
         // brazosBaile(); // Animación anterior (Vibración?)
-        brazos2(); // Animación más amplia, rapida y con retorno
+        brazosVictoria(); // Animación nueva y distinta (victoria)
         break;
 
       case 3: // Celebración 1 (Brazo Der Arriba)
@@ -351,6 +351,45 @@ void brazos2(){
   }
   
   brazosRepos();
+}
+
+void brazosVictoria(){
+  // MOVIMIENTO VICTORIA (NUEVO, TOTALMENTE DISTINTO)
+  // S3 (Der) va de 10 a 80 (Aumentando sube el brazo derecho, 70 grados de recorrido)
+  // S5 (Izq) va de 90 a 0 (Disminuyendo sube el brazo izquierdo, 90 grados de recorrido)
+  
+  for (int rep = 0; rep < 2; rep++) {
+      // 1. Subir brazos rápido en un rango máximo (saltos más grandes para el doble de velocidad)
+      for (int i=0; i<=360; i+=1) {
+          servo_3.write(10 + map(i, 0, 360, 0, 70));        // Sube 70 grados (hasta 80)
+          servo_5.write(90 - map(i, 0, 360, 0, 90));        // Sube 90 grados (hasta 0)
+          delay(12); // Tiempo físico necesario para mover los engranajes
+      }
+      
+      // 2. Ondulaciones arriba (sacudidas)
+      for (int j=0; j<5; j++) {
+          servo_3.write(80);
+          servo_5.write(0);
+          delay(90); // Menos retardo para sacudidas más rápidas
+          servo_3.write(50);
+          servo_5.write(30);
+          delay(90);
+      }
+      
+      // 3. Bajar muy rápidamente haciendo un leve rebote
+      for (int i=360; i>=0; i-=9) {
+          servo_3.write(10 + map(i, 0, 360, 0, 70));
+          servo_5.write(90 - map(i, 0, 360, 0, 90));
+          delay(10);
+      }
+      
+      brazosRepos();
+      
+      // Pequeña pausa entre cada repetición
+      if (rep == 0) {
+          delay(150);
+      }
+  }
 }
 
 void brazosBaile(){
