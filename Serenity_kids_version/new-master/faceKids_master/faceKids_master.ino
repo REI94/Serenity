@@ -22,7 +22,7 @@ LCDWIKI_SPI mylcd(MODEL,CS,CD,MISO,MOSI,RST,SCK,LED);
 #define RED     0xF800
 #define GREEN   0x07E0
 #define CYAN    0x07FF
-#define MAGENTA 0xF81F
+#define ANIMATION_COLOR 0x0FFD
 #define YELLOW  0xFFE0
 #define WHITE   0xFFFF
 
@@ -210,7 +210,7 @@ void talkLoop() {
 
 // Ojos Normales
 void eyes1(){
-  mylcd.Set_Draw_color(MAGENTA);
+  mylcd.Set_Draw_color(ANIMATION_COLOR);
   // Ojos rectangulares
   mylcd.Fill_Round_Rectangle(70, 60, 150, 140, 7); // Izq
   mylcd.Fill_Round_Rectangle(200, 60, 280, 140, 7); // Der
@@ -229,7 +229,7 @@ void eyesX(){
   mylcd.Fill_Rectangle(200, 60, 280, 140);
   
   // 2. Dibujar X Magenta
-  mylcd.Set_Draw_color(MAGENTA);
+  mylcd.Set_Draw_color(ANIMATION_COLOR);
   
   // Grosor simulado offset (AUMENTADO para X mas gruesa)
   for(int k=0; k<5; k++) {
@@ -255,7 +255,7 @@ void eyesHappy(){
   mylcd.Fill_Rectangle(200, 60, 280, 140);
   
   // 2. Dibujar ^ Magenta
-  mylcd.Set_Draw_color(MAGENTA);
+  mylcd.Set_Draw_color(ANIMATION_COLOR);
   
   // Grosor simulado offset (k<7 como ajustó el usuario)
   for(int k=0; k<7; k++) {
@@ -285,19 +285,19 @@ void Nomouth2(){
 
 void mouth(){
   // Boca normal
-  mylcd.Set_Draw_color(MAGENTA);
+  mylcd.Set_Draw_color(ANIMATION_COLOR);
   mylcd.Fill_Rectangle(140, 180, 210, 182);
 }
 
 void mouth3(){
   // Boca var 3
-  mylcd.Set_Draw_color(MAGENTA);
+  mylcd.Set_Draw_color(ANIMATION_COLOR);
   mylcd.Fill_Rectangle(140, 160, 210, 182);
 }
 
 void mouthHap(){
   // Boca Feliz
-  mylcd.Set_Draw_color(MAGENTA);
+  mylcd.Set_Draw_color(ANIMATION_COLOR);
   int x1 = 140; int y1 = 180; int x2 = 210; int y2 = 182;
   int x3 = 140; int y3 = 170; int x4 = 142; int y4 = 182;
   int x5 = 208; int y5 = 170; int x6 = 210; int y6 = 182;
@@ -308,7 +308,7 @@ void mouthHap(){
 
 void mouthSad(){
   // Boca Triste (invertida)
-  mylcd.Set_Draw_color(MAGENTA);
+  mylcd.Set_Draw_color(ANIMATION_COLOR);
   int x1 = 140; int y1 = 180; int x2 = 210; int y2 = 182;
   int x3 = 140; int y3 = 190; int x4 = 142; int y4 = 182;
   int x5 = 208; int y5 = 190; int x6 = 210; int y6 = 182;
