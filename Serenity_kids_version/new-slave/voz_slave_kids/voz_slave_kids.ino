@@ -25,7 +25,10 @@ Keypad customKeypad = Keypad(makeKeymap(hexaKeys), rowPins, colPins, ROWS, COLS)
 // ==========================================
 SoftwareSerial mySerial(2, 4);  // RX, TX
 DFRobotDFPlayerMini myDFPlayer;
-const int PIN_BUSY = 3; 
+const int PIN_BUSY = 3;
+const int maxVolumen = 23; 
+int currentVolume = maxVolumen;
+
 
 // CARPETAS
 const int F_INTRO   = 10;   // Carpeta 10: Bienvenida
@@ -155,6 +158,24 @@ void(* resetFunc) (void) = 0;
 // HELPERS
 // ==========================================
 
+char getKeyAndHandleVolume(bool isAnsweringAB = false) {
+  char k = customKeypad.getKey();
+  if (k) {
+    if (!isAnsweringAB && (k == 'A' || k == 'B')) {
+      if (k == 'A') {
+        currentVolume++;
+        if (currentVolume > maxVolumen) currentVolume = maxVolumen; // Límite reducido a maxVolumen para evitar cortes de energía
+      } else if (k == 'B') {
+        currentVolume--;
+        if (currentVolume < 0) currentVolume = 0;
+      }
+      myDFPlayer.volume(currentVolume);
+      return 0; // Key consumed
+    }
+  }
+  return k;
+}
+
 void requestEvent() {
   Wire.write(codigoParaMaster);
 }
@@ -167,7 +188,7 @@ int waitAudio(int status) {
   
   // 1. Wait for START (BUSY goes LOW)
   while(digitalRead(PIN_BUSY) == HIGH && millis() - t < 2500) {
-     char k = customKeypad.getKey();
+     char k = getKeyAndHandleVolume();
      if (k == '#') { myDFPlayer.stop(); return NAV_NEXT; }
      if (k == '*') { myDFPlayer.stop(); return NAV_PREV; }
      if (k == 'D') resetFunc();
@@ -177,7 +198,7 @@ int waitAudio(int status) {
   // 2. Wait for END (BUSY goes HIGH)
   unsigned long highStart = 0;
   while(true) {
-     char k = customKeypad.getKey();
+     char k = getKeyAndHandleVolume();
      if (k == '#') { myDFPlayer.stop(); return NAV_NEXT; }
      if (k == '*') { myDFPlayer.stop(); return NAV_PREV; }
      if (k == 'D') resetFunc();
@@ -203,7 +224,7 @@ int playFolderSafe(int folder, int file, int status) {
   // Blind wait but checking keys
   unsigned long t = millis();
   while(millis() - t < 500) {
-     char k = customKeypad.getKey();
+     char k = getKeyAndHandleVolume();
      if (k == '#') { myDFPlayer.stop(); return NAV_NEXT; }
      if (k == '*') { myDFPlayer.stop(); return NAV_PREV; }
      if (k == 'D') resetFunc();
@@ -259,7 +280,7 @@ void handleErrorFlow(bool isLast) {
   
   char key = 0;
   while(true) {
-    key = customKeypad.getKey();
+    key = getKeyAndHandleVolume();
     if (key == 'D') resetFunc(); 
     
     if (key == '1') return;
@@ -302,7 +323,7 @@ int waitAnswerLogic(int expected) {
    
    if (digitsNeeded == 1) {
       while(true) {
-         char k = customKeypad.getKey();
+         char k = getKeyAndHandleVolume(true);
          if (k == 'D') resetFunc();
          if (k == '#') return NAV_NEXT;
          if (k == '*') return NAV_PREV;
@@ -317,7 +338,7 @@ int waitAnswerLogic(int expected) {
       int val = 0;
       // Digit 1
       while(true) {
-         char k = customKeypad.getKey();
+         char k = getKeyAndHandleVolume();
          if (k == 'D') resetFunc();
          if (k == '#') return NAV_NEXT;
          if (k == '*') return NAV_PREV;
@@ -329,7 +350,7 @@ int waitAnswerLogic(int expected) {
       }
       // Digit 2
       while(true) {
-         char k = customKeypad.getKey();
+         char k = getKeyAndHandleVolume();
          if (k == 'D') resetFunc();
          if (k == '#') return NAV_NEXT; 
          if (k == '*') return NAV_PREV; 
@@ -345,7 +366,7 @@ int waitAnswerLogic(int expected) {
       int val = 0;
       // Digit 1
       while(true) {
-         char k = customKeypad.getKey();
+         char k = getKeyAndHandleVolume();
          if (k == 'D') resetFunc();
          if (k == '#') return NAV_NEXT;
          if (k == '*') return NAV_PREV;
@@ -353,7 +374,7 @@ int waitAnswerLogic(int expected) {
       }
       // Digit 2
       while(true) {
-         char k = customKeypad.getKey();
+         char k = getKeyAndHandleVolume();
          if (k == 'D') resetFunc();
          if (k == '#') return NAV_NEXT;
          if (k == '*') return NAV_PREV;
@@ -361,7 +382,7 @@ int waitAnswerLogic(int expected) {
       }
       // Digit 3
       while(true) {
-         char k = customKeypad.getKey();
+         char k = getKeyAndHandleVolume();
          if (k == 'D') resetFunc();
          if (k == '#') return NAV_NEXT;
          if (k == '*') return NAV_PREV;
@@ -387,14 +408,14 @@ void setup() {
   if (!myDFPlayer.begin(mySerial)) {
     Serial.println(F("Error DFPlayer"));
   }
-  myDFPlayer.volume(20); 
+  myDFPlayer.volume(currentVolume); 
   delay(3000); 
   
   currentState = ST_INTRO_SEQ;
 }
 
 void loop() {
-  char key = customKeypad.getKey();
+  char key = getKeyAndHandleVolume();
   
   if (key == 'D') {
       Serial.println("Reset");
@@ -445,7 +466,7 @@ void loop() {
        {
          bool waiting = true;
          while(waiting) {
-           char k = customKeypad.getKey();
+           char k = getKeyAndHandleVolume();
            if (k == 'D') resetFunc();
            if (k == '1' || k == '#') waiting = false; 
          }
@@ -512,7 +533,7 @@ void loop() {
       else playFolderSafe(F_GRADE1, 16, MASTER_TALK);
       
       while(true) {
-        char k = customKeypad.getKey();
+        char k = getKeyAndHandleVolume();
         if (k == 'D') resetFunc();
         
         if(k == '1') {
