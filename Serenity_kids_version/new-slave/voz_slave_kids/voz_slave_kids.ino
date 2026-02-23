@@ -26,8 +26,8 @@ Keypad customKeypad = Keypad(makeKeymap(hexaKeys), rowPins, colPins, ROWS, COLS)
 SoftwareSerial mySerial(2, 4);  // RX, TX
 DFRobotDFPlayerMini myDFPlayer;
 const int PIN_BUSY = 3;
-const int maxVolumen = 23; 
-int currentVolume = maxVolumen;
+const int maxVolumen = 30; 
+int currentVolume = 23;
 
 
 // CARPETAS
@@ -270,28 +270,7 @@ void playFarewell() {
 
 void handleErrorFlow(bool isLast) {
   playFeedback(false, isLast); 
-  
-  int res;
-  if (selectedGrade == 3) res = playFolderSafe(F_GRADE3, 35, MASTER_TALK);
-  else if (selectedGrade == 4) res = playFolderSafe(F_GRADE4, 12, MASTER_TALK); // Usar Explicacion como fallback
-  else res = playFolderSafe(F_GRADE1, A_G1_ERROR_MENU, MASTER_TALK);
-  
-  if (res != NAV_NONE) return; 
-  
-  char key = 0;
-  while(true) {
-    key = getKeyAndHandleVolume();
-    if (key == 'D') resetFunc(); 
-    
-    if (key == '1') return;
-    if (key == '2') {
-       if (selectedGrade == 1) playFolderSafe(F_GRADE1, A_G1_EXPLAIN_RETRY, MASTER_TALK);
-       else if (selectedGrade == 2) playFolderSafe(F_GRADE2, 12, MASTER_TALK); 
-       else if (selectedGrade == 3) playFolderSafe(F_GRADE3, 12, MASTER_TALK);
-       else playFolderSafe(F_GRADE4, 12, MASTER_TALK);
-       return; 
-    }
-  }
+  // Explicaciones eliminadas a peticion
 }
 
 void shuffleArray(int* array, int size) {
@@ -454,11 +433,8 @@ void loop() {
        // 2. Generic Intro
        playFolderSafe(F_INTRO, 3, MASTER_TALK);
 
-       // 3. Explanation
-       if (selectedGrade == 1) playFolderSafe(F_GRADE1, 2, MASTER_TALK);
-       else if (selectedGrade == 2) playFolderSafe(F_GRADE2, 12, MASTER_TALK);
-       else if (selectedGrade == 3) playFolderSafe(F_GRADE3, 12, MASTER_TALK);
-       else playFolderSafe(F_GRADE4, 12, MASTER_TALK);
+       // 3. Explanation (REMOVED)
+       // Explicaciones generales de matematica removidas a peticion
 
        // 4. Press 1
        playFolderSafe(F_INTRO, 4, MASTER_TALK);
@@ -521,15 +497,11 @@ void loop() {
       
     case ST_MENU:
       Serial.println("--- MENU ---");
-      if (selectedGrade == 3) playFolderSafe(F_GRADE3, 13, MASTER_TALK);
-      else if (selectedGrade == 4) playFolderSafe(F_GRADE4, 13, MASTER_TALK); // Using F04/13 as Menu Prompt? (Check CSV)
-      // CSV 13 is "Selection Multiple Question 1" actually... 
+      if (selectedGrade == 3 || selectedGrade == 4) playFolderSafe(F_GRADE3, 13, MASTER_TALK);
+      // CSV 13 is "Selection Multiple Question 1" actually for Grade 4... 
       // Grade 3 used F03/13 "Explanation". 
       // Grade 4 doesn't have a specific "Menu" prompt listed in CSV 
-      // We will re-use Grade 3's menu prompt logic if file missing or reuse Grade 1 generic.
-      // Actually CSV says 04_13 is "Cuarto grado: Pregunta - SM". 
-      // The flow expects a "Select Game" prompt. 
-      // For now, let's use F_GRADE1, 16 (Generic "Elige un juego") for G4 too.
+      // El usuario solicitó re-utilizar el menú de grado 3 para grado 4
       else playFolderSafe(F_GRADE1, 16, MASTER_TALK);
       
       while(true) {
