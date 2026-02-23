@@ -226,7 +226,11 @@ void songLoop() {
           CODE = c; 
           brazosRepos();
           Nomouth();
-          mouthHap();
+          if (c == 0) {
+             eyes1();
+          } else {
+             mouthHap(); 
+          }
           return; 
         } 
      }

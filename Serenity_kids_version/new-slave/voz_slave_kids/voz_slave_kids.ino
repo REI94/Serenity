@@ -26,7 +26,7 @@ Keypad customKeypad = Keypad(makeKeymap(hexaKeys), rowPins, colPins, ROWS, COLS)
 SoftwareSerial mySerial(2, 4);  // RX, TX
 DFRobotDFPlayerMini myDFPlayer;
 const int PIN_BUSY = 3;
-const int maxVolumen = 30; 
+const int maxVolumen = 30; // 23 recommended volume - 30 max
 int currentVolume = 23;
 
 
@@ -537,7 +537,7 @@ void loop() {
       Serial.println("--- MENU ---");
       if (selectedGrade == 3 || selectedGrade == 4) playFolderSafe(F_GRADE3, 13, MASTER_TALK);
       else if (selectedGrade == 5) playFolderSafe(F_GRADE5, 13, MASTER_TALK);
-      else if (selectedGrade == 6) playFolderSafe(F_GRADE5, 13, MASTER_TALK); // Fallback menu
+      else if (selectedGrade == 6) playFolderSafe(F_GRADE6, 27, MASTER_TALK); // Especifico de ecuaciones
       // El usuario solicitó re-utilizar el menú de grado 3 para grado 4
       else playFolderSafe(F_GRADE1, 16, MASTER_TALK);
       
@@ -706,6 +706,9 @@ void loop() {
            int fragmentFile = (currentSongChoice * 10) + 11 + songFragmentCount; // Ej: 11,12... 21,22... 31,32
            playFolderSafe(F_SONGS, fragmentFile, MASTER_SONG);
            songFragmentCount++;
+           
+           // Evitar que el siguiente ciclo inicie antes de restaurar la cara neutral
+           delay(300); 
         } else {
            handleErrorFlow(isLast);
         }
