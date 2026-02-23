@@ -142,6 +142,12 @@ void loop() {
          talkLoop(); // Llamada a función externa
          break;
 
+      case 21: // MODO CANCION
+         eyesHappy();
+         mouthHap();
+         songLoop();
+         break;
+
       case 99: // RESET REMOTO
          Serial.println("RESET COMANDADO");
          delay(100);
@@ -200,6 +206,50 @@ void talkLoop() {
         }
      }
      delay(10); // Mas rapido
+  }
+}
+
+void songLoop() {
+  int pos3 = 10;
+  int pos5 = 90;
+  int dir3 = 1;
+  int dir5 = 0; // 0 significa que todavia no arranca
+  
+  servo_3.write(pos3);
+  servo_5.write(pos5);
+  
+  while (true) {
+     Wire.requestFrom(8, 1);
+     if (Wire.available()) {
+        int c = Wire.read();
+        if (c != 21) { 
+          CODE = c; 
+          brazosRepos();
+          Nomouth();
+          mouthHap();
+          return; 
+        } 
+     }
+
+     pos3 += dir3;
+     if (pos3 >= 45) { dir3 = -1; }
+     else if (pos3 <= 10) { dir3 = 1; }
+
+     // Si el servo izquierdo (S5) aun no ha arrancado, revisar si el S3 ya llego a la mitad de su recorrido de ida (27 grados)
+     if (dir5 == 0 && pos3 >= 27 && dir3 == 1) {
+         dir5 = -1; // S5 desciende de 90 hacia 45
+     }
+     
+     if (dir5 != 0) {
+         pos5 += dir5;
+         if (pos5 <= 45) { dir5 = 1; }
+         else if (pos5 >= 90) { dir5 = -1; }
+     }
+
+     servo_3.write(pos3);
+     servo_5.write(pos5);
+     
+     delay(15); 
   }
 }
 
@@ -355,32 +405,33 @@ void brazos2(){
 
 void brazosVictoria(){
   // MOVIMIENTO VICTORIA (NUEVO, TOTALMENTE DISTINTO)
-  // S3 (Der) va de 10 a 80 (Aumentando sube el brazo derecho, 70 grados de recorrido)
-  // S5 (Izq) va de 90 a 0 (Disminuyendo sube el brazo izquierdo, 90 grados de recorrido)
+  // S3 (Der) va de 10 a 80 (Aumentando sube el brazo derecho, 70 grados)
+  // S5 (Izq) va de 90 a 0 (Disminuyendo sube el brazo izquierdo, 90 grados)
   
   for (int rep = 0; rep < 2; rep++) {
-      // 1. Subir brazos rápido en un rango máximo (saltos más grandes para el doble de velocidad)
-      for (int i=0; i<=360; i+=1) {
-          servo_3.write(10 + map(i, 0, 360, 0, 70));        // Sube 70 grados (hasta 80)
-          servo_5.write(90 - map(i, 0, 360, 0, 90));        // Sube 90 grados (hasta 0)
-          delay(12); // Tiempo físico necesario para mover los engranajes
+      // 1. Subir brazos rápido 
+      // El bucle principal rige los grados del servo izquierdo (0 a 90) para que sea su motor el que reciba órdenes limpias como en el archivo de prueba
+      for (int angle=0; angle<=90; angle+=2) {
+          servo_5.write(90 - angle);                    // Ocupa los 90 grados de recorrido
+          servo_3.write(10 + (angle * 70 / 90));        // Ocupa los 70 grados de recorrido proporcionales
+          delay(8); // Se mueve veloz al restar el delay a casi la mitad vs el archivo de test original
       }
       
-      // 2. Ondulaciones arriba (sacudidas)
+      // 2. Ondulaciones arriba (sacudidas veloces)
       for (int j=0; j<5; j++) {
           servo_3.write(80);
           servo_5.write(0);
-          delay(90); // Menos retardo para sacudidas más rápidas
+          delay(40); 
           servo_3.write(50);
           servo_5.write(30);
-          delay(90);
+          delay(40);
       }
       
       // 3. Bajar muy rápidamente haciendo un leve rebote
-      for (int i=360; i>=0; i-=9) {
-          servo_3.write(10 + map(i, 0, 360, 0, 70));
-          servo_5.write(90 - map(i, 0, 360, 0, 90));
-          delay(10);
+      for (int angle=90; angle>=0; angle-=6) {
+          servo_5.write(90 - angle);
+          servo_3.write(10 + (angle * 70 / 90));
+          delay(8); 
       }
       
       brazosRepos();

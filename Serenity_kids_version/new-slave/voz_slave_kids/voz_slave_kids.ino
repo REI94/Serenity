@@ -53,6 +53,7 @@ const int MASTER_NEUTRAL = 0;
 const int MASTER_SAD     = 1;
 const int MASTER_HAPPY   = 2;
 const int MASTER_TALK    = 20;
+const int MASTER_SONG    = 21;
 
 int codigoParaMaster = MASTER_NEUTRAL; 
 
@@ -703,7 +704,7 @@ void loop() {
            playFeedback(true, isLast);
            // Reproducir fragmento de la cancion
            int fragmentFile = (currentSongChoice * 10) + 11 + songFragmentCount; // Ej: 11,12... 21,22... 31,32
-           playFolderSafe(F_SONGS, fragmentFile, MASTER_TALK);
+           playFolderSafe(F_SONGS, fragmentFile, MASTER_SONG);
            songFragmentCount++;
         } else {
            handleErrorFlow(isLast);
