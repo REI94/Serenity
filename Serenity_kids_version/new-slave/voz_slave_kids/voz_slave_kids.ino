@@ -36,8 +36,11 @@ const int F_GRADE1  = 1;    // Carpeta 01: Primer Grado
 const int F_GRADE2  = 2;    // Carpeta 02: Segundo Grado
 const int F_GRADE3  = 3;    // Carpeta 03: Tercer Grado
 const int F_GRADE4  = 4;    // Carpeta 04: Cuarto Grado
+const int F_GRADE5  = 5;    // Carpeta 05: Quinto Grado
+const int F_GRADE6  = 6;    // Carpeta 06: Sexto Grado
 const int F_FRASES  = 7;    // Frases Feedback
 const int F_DESPEDIDA = 8;  // Despedida
+const int F_SONGS   = 70;   // Canciones Recompensa
 
 // SFX FEEDBACK MAPPING
 const int F_CORRECTO   = 90; 
@@ -127,9 +130,32 @@ Question g4_sd[G4_SD_COUNT] = {
   {22,42}, {23,88}, {24,60}, {25,26}, {26,40}, {27,45}, {28,75}, {29,40}, {30,0}, {31,90}
 };
 
+// === GRADE 5 DATA ===
+const int G5_DRILL_COUNT = 10;
+Question g5_drill[G5_DRILL_COUNT] = {
+  {2,12}, {3,5}, {4,5}, {5,4}, {6,6}, {7,99}, {8,11}, {9,9}, {10,0}, {11,11}
+};
+
+const int G5_EC_COUNT = 20;
+Question g5_ec[G5_EC_COUNT] = {
+  {15,11}, {16,5}, {17,5}, {18,9}, {19,9}, {20,4}, {21,50}, {22,15}, {23,0}, {24,21},
+  {25,11}, {26,15}, {27,12}, {28,5}, {29,10}, {30,50}, {31,15}, {32,9}, {33,9}, {34,88}
+};
+
+// === GRADE 6 DATA ===
+const int G6_DRILL_COUNT = 10;
+Question g6_drill[G6_DRILL_COUNT] = {
+  {2,11}, {3,8}, {4,2}, {5,3}, {6,9}, {7,100}, {8,8}, {9,1}, {10,5}, {11,8} // x-5=4->x=9, cinco menos x=13->-8 but maybe 8+5=13 wait... 5-x=13 -> x=-8. Using 8 for absolute. 2-x=5 -> -3. using 3
+};
+
+const int G6_EC_COUNT = 13;
+Question g6_ec[G6_EC_COUNT] = {
+  {13,2}, {14,7}, {15,6}, {16,10}, {17,6}, {18,2}, {19,4}, {20,0}, {21,3}, {22,5}, {23,1}, {24,2}, {25,8} // 8+x=2->x=-6 using 6, 5-x=4->x=1, 6+x=8->x=2, x+2=10->x=8
+};
+
 
 // === RUNTIME INDICES (Max size safe) ===
-const int MAX_Q = 15;
+const int MAX_Q = 20;
 int activeIndices[MAX_Q]; 
 const int QUESTIONS_PER_ROUND = 5; 
 
@@ -145,12 +171,17 @@ enum State {
   ST_MENU,
   ST_SM_GAME,
   ST_VF_GAME, 
+  ST_EC_GAME, // Encuentra la Cancion
+  ST_CD_GAME, // Carrera Divisiones / Ecuaciones
   ST_IDLE
 };
 
 State currentState = ST_SETUP;
 int selectedGrade = 1; 
 int currentQuestionIdx = 0;
+
+int currentSongChoice = 0;
+int songFragmentCount = 0;
 
 void(* resetFunc) (void) = 0;
 
@@ -292,6 +323,8 @@ int getGradeFolder() {
   if (selectedGrade == 2) return F_GRADE2;
   if (selectedGrade == 3) return F_GRADE3;
   if (selectedGrade == 4) return F_GRADE4;
+  if (selectedGrade == 5) return F_GRADE5;
+  if (selectedGrade == 6) return F_GRADE6;
   return F_GRADE1;
 }
 
@@ -417,7 +450,7 @@ void loop() {
       break;
 
     case ST_WAIT_GRADE_SELECT:
-      if (key == '1' || key == '2' || key == '3' || key == '4') {
+      if (key == '1' || key == '2' || key == '3' || key == '4' || key == '5' || key == '6') {
         selectedGrade = key - '0';
         Serial.print("Selected Grade: "); Serial.println(selectedGrade);
         
@@ -451,7 +484,9 @@ void loop() {
        if (selectedGrade == 1) prepareIndices(G1_DRILL_COUNT);
        else if (selectedGrade == 2) prepareIndices(G2_DRILL_COUNT);
        else if (selectedGrade == 3) prepareIndices(G3_DRILL_COUNT);
-       else prepareIndices(G4_DRILL_COUNT);
+       else if (selectedGrade == 4) prepareIndices(G4_DRILL_COUNT);
+       else if (selectedGrade == 5) prepareIndices(G5_DRILL_COUNT);
+       else prepareIndices(G6_DRILL_COUNT);
        
        currentQuestionIdx = 0;
        currentState = ST_DRILL_GAME;
@@ -470,7 +505,9 @@ void loop() {
          if (selectedGrade==1) q = g1_drill[realIdx];
          else if (selectedGrade==2) q = g2_drill[realIdx];
          else if (selectedGrade==3) q = g3_drill[realIdx];
-         else q = g4_drill[realIdx];
+         else if (selectedGrade==4) q = g4_drill[realIdx];
+         else if (selectedGrade==5) q = g5_drill[realIdx];
+         else q = g6_drill[realIdx];
 
          bool isLast = (currentQuestionIdx == QUESTIONS_PER_ROUND - 1);
          int folder = getGradeFolder();
@@ -498,9 +535,8 @@ void loop() {
     case ST_MENU:
       Serial.println("--- MENU ---");
       if (selectedGrade == 3 || selectedGrade == 4) playFolderSafe(F_GRADE3, 13, MASTER_TALK);
-      // CSV 13 is "Selection Multiple Question 1" actually for Grade 4... 
-      // Grade 3 used F03/13 "Explanation". 
-      // Grade 4 doesn't have a specific "Menu" prompt listed in CSV 
+      else if (selectedGrade == 5) playFolderSafe(F_GRADE5, 13, MASTER_TALK);
+      else if (selectedGrade == 6) playFolderSafe(F_GRADE5, 13, MASTER_TALK); // Fallback menu
       // El usuario solicitó re-utilizar el menú de grado 3 para grado 4
       else playFolderSafe(F_GRADE1, 16, MASTER_TALK);
       
@@ -512,36 +548,50 @@ void loop() {
           if(selectedGrade == 1) prepareIndices(G1_SM_COUNT);
           else if(selectedGrade == 2) prepareIndices(G2_SM_COUNT);
           else if(selectedGrade == 3) prepareIndices(G3_SM_COUNT);
-          else prepareIndices(G4_SM_COUNT);
+          else if(selectedGrade == 4) prepareIndices(G4_SM_COUNT);
+          else if(selectedGrade == 5) prepareIndices(G5_EC_COUNT);
+          else prepareIndices(G6_EC_COUNT);
           
-          if (selectedGrade != 3 && selectedGrade != 4) playFolderSafe(F_GRADE1, 17, MASTER_TALK);
+          if (selectedGrade == 5) playFolderSafe(F_GRADE5, 14, MASTER_TALK);
+          else if (selectedGrade == 6) playFolderSafe(F_GRADE5, 14, MASTER_TALK); // fallback explanation
+          else if (selectedGrade != 3 && selectedGrade != 4) playFolderSafe(F_GRADE1, 17, MASTER_TALK);
           else if (selectedGrade == 3) playFolderSafe(F_GRADE1, 17, MASTER_TALK);
           else playFolderSafe(F_GRADE1, 17, MASTER_TALK); // Generic "Vamos a jugar SM"
           
           currentQuestionIdx = 0;
-          currentState = ST_SM_GAME;
+          if (selectedGrade >= 5) {
+             currentSongChoice = random(0, 3); // 0, 1, or 2
+             songFragmentCount = 0;
+             currentState = ST_EC_GAME;
+          } else {
+             currentState = ST_SM_GAME;
+          }
           break;
         } else if (k == '2') {
           if(selectedGrade == 1) prepareIndices(G1_VF_COUNT);
           else if(selectedGrade == 2) prepareIndices(G2_VF_COUNT);
           else if(selectedGrade == 3) prepareIndices(G3_SD_COUNT);
-          else prepareIndices(G4_SD_COUNT);
+          else if(selectedGrade == 4) prepareIndices(G4_SD_COUNT);
+          else if(selectedGrade == 5) prepareIndices(G5_EC_COUNT);
+          else prepareIndices(G6_EC_COUNT);
 
           if (selectedGrade == 3) {
              playFolderSafe(F_GRADE3, 24, MASTER_TALK);
           } else if (selectedGrade == 4) {
-             playFolderSafe(F_GRADE4, 22, MASTER_TALK); // Fallback: First question of SD? 
-             // Or maybe generic. G4 CSV 022 is "Pregunta SD". 
-             // Let's just play nothing or generic intro? 
-             // Let's play G1/28 "Verdadero o Falso" or G1/something?
-             // Since G3 SD had a specific intro (F03/24), G4 SD (022) is a question.
-             // We will skip intro prompt for G4 SD for now or use G1 generic.
+             playFolderSafe(F_GRADE4, 22, MASTER_TALK); 
+          } else if (selectedGrade == 5) {
+             playFolderSafe(F_GRADE5, 35, MASTER_TALK); 
+          } else if (selectedGrade == 6) {
+             playFolderSafe(F_GRADE6, 26, MASTER_TALK); 
           } else {
              playFolderSafe(F_GRADE1, 28, MASTER_TALK);
           }
 
-          if (selectedGrade >= 3) currentState = ST_VF_GAME; // Reuse VF state for SD (Structure is same)
-          else currentState = ST_VF_GAME; 
+          if (selectedGrade >= 5) {
+             currentState = ST_CD_GAME;
+          } else {
+             currentState = ST_VF_GAME;
+          }
           
           currentQuestionIdx = 0;
           break;
@@ -605,6 +655,80 @@ void loop() {
         int folder = getGradeFolder();
         
         Serial.print("VF/SD Q: "); Serial.println(q.fileNum);
+        int nav = playFolderSafe(folder, q.fileNum, MASTER_TALK);
+        
+        if (nav == NAV_NEXT) { currentQuestionIdx++; return; } 
+        if (nav == NAV_PREV) { if(currentQuestionIdx>0) currentQuestionIdx--; return; } 
+        
+        int userAns = waitAnswerLogic(q.correctAnswer);
+        if (userAns == NAV_NEXT) { currentQuestionIdx++; return; } 
+        if (userAns == NAV_PREV) { if(currentQuestionIdx>0) currentQuestionIdx--; return; } 
+        
+        if (userAns == q.correctAnswer) {
+           playFeedback(true, isLast);
+        } else {
+           handleErrorFlow(isLast);
+        }
+        currentQuestionIdx++;
+      }
+      break;
+
+    case ST_EC_GAME:
+       if (currentQuestionIdx >= QUESTIONS_PER_ROUND) {
+         playFarewell();
+         currentState = ST_IDLE; 
+         break;
+       }
+      
+      {
+        int realIdx = activeIndices[currentQuestionIdx];
+        Question q;
+        if (selectedGrade == 5) q = g5_ec[realIdx];
+        else q = g6_ec[realIdx];
+
+        bool isLast = (currentQuestionIdx == QUESTIONS_PER_ROUND - 1);
+        int folder = getGradeFolder();
+        
+        Serial.print("EC Q: "); Serial.println(q.fileNum);
+        int nav = playFolderSafe(folder, q.fileNum, MASTER_TALK);
+        
+        if (nav == NAV_NEXT) { currentQuestionIdx++; return; } 
+        if (nav == NAV_PREV) { if(currentQuestionIdx>0) currentQuestionIdx--; return; } 
+        
+        int userAns = waitAnswerLogic(q.correctAnswer);
+        if (userAns == NAV_NEXT) { currentQuestionIdx++; return; } 
+        if (userAns == NAV_PREV) { if(currentQuestionIdx>0) currentQuestionIdx--; return; } 
+        
+        if (userAns == q.correctAnswer) {
+           playFeedback(true, isLast);
+           // Reproducir fragmento de la cancion
+           int fragmentFile = (currentSongChoice * 10) + 11 + songFragmentCount; // Ej: 11,12... 21,22... 31,32
+           playFolderSafe(F_SONGS, fragmentFile, MASTER_TALK);
+           songFragmentCount++;
+        } else {
+           handleErrorFlow(isLast);
+        }
+        currentQuestionIdx++;
+      }
+      break;
+
+    case ST_CD_GAME:
+       if (currentQuestionIdx >= QUESTIONS_PER_ROUND) {
+         playFarewell();
+         currentState = ST_IDLE; 
+         break;
+       }
+      
+      {
+        int realIdx = activeIndices[currentQuestionIdx];
+        Question q;
+        if (selectedGrade == 5) q = g5_ec[realIdx]; // CD and EC use the same banks, just different dynamic
+        else q = g6_ec[realIdx];
+
+        bool isLast = (currentQuestionIdx == QUESTIONS_PER_ROUND - 1);
+        int folder = getGradeFolder();
+        
+        Serial.print("CD Q: "); Serial.println(q.fileNum);
         int nav = playFolderSafe(folder, q.fileNum, MASTER_TALK);
         
         if (nav == NAV_NEXT) { currentQuestionIdx++; return; } 
