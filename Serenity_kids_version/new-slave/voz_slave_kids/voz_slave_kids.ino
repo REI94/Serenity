@@ -26,8 +26,8 @@ Keypad customKeypad = Keypad(makeKeymap(hexaKeys), rowPins, colPins, ROWS, COLS)
 SoftwareSerial mySerial(2, 4);  // RX, TX
 DFRobotDFPlayerMini myDFPlayer;
 const int PIN_BUSY = 3;
-const int maxVolumen = 30; // 23 recommended volume - 30 max
-int currentVolume = 23;
+const int maxVolumen = 35; // 23 recommended volume - 30 max
+int currentVolume = 24;
 
 
 // CARPETAS
@@ -109,9 +109,12 @@ Question g3_sm[G3_SM_COUNT] = {
   {14,2},{15,1},{16,2},{17,1},{18,2},{19,1},{20,2},{21,1},{22,1},{23,1}
 };
 
-const int G3_SD_COUNT = 10; 
+const int G3_SD_COUNT = 20; 
 Question g3_sd[G3_SD_COUNT] = {
-  {25,14},{26,8},{27,9},{28,12},{29,8},{30,9},{31,15},{32,12},{33,14},{34,2}
+  // Preguntas normales "Serenity dice"
+  {25,14},{26,8},{27,9},{28,12},{29,8},{30,9},{31,15},{32,12},{33,14},{34,2},
+  // Preguntas trampa (Calentamiento, sin "Serenity dice") - Exigen tecla 'A' la cual retorna 1
+  {2,1},{3,1},{4,1},{5,1},{6,1},{7,1},{8,1},{9,1},{10,1},{11,1}
 };
 
 // === GRADE 4 DATA ===
@@ -126,9 +129,12 @@ Question g4_sm[G4_SM_COUNT] = {
   // 14 map to Option B (2) per user req. 
 };
 
-const int G4_SD_COUNT = 10;
+const int G4_SD_COUNT = 20;
 Question g4_sd[G4_SD_COUNT] = {
-  {22,42}, {23,88}, {24,60}, {25,26}, {26,40}, {27,45}, {28,75}, {29,40}, {30,0}, {31,90}
+  // Preguntas normales "Serenity dice"
+  {22,42}, {23,88}, {24,60}, {25,26}, {26,40}, {27,45}, {28,75}, {29,40}, {30,0}, {31,90},
+  // Preguntas trampa (Calentamiento, sin "Serenity dice") - Exigen tecla 'A' la cual retorna 1
+  {2,1}, {3,1}, {4,1}, {5,1}, {6,1}, {7,1}, {8,1}, {9,1}, {10,1}, {11,1}
 };
 
 // === GRADE 5 DATA ===
@@ -213,6 +219,22 @@ void requestEvent() {
 }
 
 // UPDATE: Takes INT STATUS to maintain on I2C
+
+bool checkResets(char k) {
+  if (k == 'C') {
+     resetFunc();
+     return true;
+  }
+  if (k == 'D') {
+     codigoParaMaster = 99;
+     long w = millis();
+     while(millis() - w < 500) delay(10); // Wait for master to read 99
+     resetFunc();
+     return true;
+  }
+  return false;
+}
+
 int waitAudio(int status) {
   codigoParaMaster = status;
   
@@ -223,7 +245,7 @@ int waitAudio(int status) {
      char k = getKeyAndHandleVolume();
      if (k == '#') { myDFPlayer.stop(); return NAV_NEXT; }
      if (k == '*') { myDFPlayer.stop(); return NAV_PREV; }
-     if (k == 'D') resetFunc();
+     checkResets(k);
      delay(10);
   }
   
@@ -233,7 +255,7 @@ int waitAudio(int status) {
      char k = getKeyAndHandleVolume();
      if (k == '#') { myDFPlayer.stop(); return NAV_NEXT; }
      if (k == '*') { myDFPlayer.stop(); return NAV_PREV; }
-     if (k == 'D') resetFunc();
+     checkResets(k);
      
      if (digitalRead(PIN_BUSY) == HIGH) {
         if (highStart == 0) highStart = millis();
@@ -259,7 +281,7 @@ int playFolderSafe(int folder, int file, int status) {
      char k = getKeyAndHandleVolume();
      if (k == '#') { myDFPlayer.stop(); return NAV_NEXT; }
      if (k == '*') { myDFPlayer.stop(); return NAV_PREV; }
-     if (k == 'D') resetFunc();
+     checkResets(k);
      delay(10);
   }
   
@@ -273,9 +295,13 @@ void playFeedback(bool correct, bool isLast) {
     waitAudio(MASTER_HAPPY); 
     
     if (!isLast) {
-      int phrase = random(1, 10); 
-      // Send TALK status while phrases
-      playFolderSafe(F_FRASES, phrase, MASTER_TALK);
+      if (currentState == ST_EC_GAME) {
+         // En Encuentra la cancion NO reproducimos frases aleatorias
+      } else {
+         int phrase = random(1, 10); 
+         // Send TALK status while phrases
+         playFolderSafe(F_FRASES, phrase, MASTER_TALK);
+      }
     } else {
       codigoParaMaster = MASTER_NEUTRAL;
     }
@@ -330,6 +356,9 @@ int getGradeFolder() {
 }
 
 int waitAnswerLogic(int expected) {
+   // Atajo exclusivo de tecla A para trampas de "Serenity Dice" (Grados 3 y 4 en ST_VF_GAME)
+   // NOTA: Para no bloquear toda la funcion, este atajo lo evaluamos antes
+   
    int digitsNeeded = 1;
    if (expected >= 100) digitsNeeded = 3;
    else if (expected >= 10) digitsNeeded = 2;
@@ -337,14 +366,18 @@ int waitAnswerLogic(int expected) {
    if (digitsNeeded == 1) {
       while(true) {
          char k = getKeyAndHandleVolume(true);
-         if (k == 'D') resetFunc();
+         checkResets(k);
          if (k == '#') return NAV_NEXT;
          if (k == '*') return NAV_PREV;
          
          if (k) {
             if (k >= '0' && k <= '9') return k - '0';
-            if (k == 'A') return 1; 
-            if (k == 'B') return 2; 
+            
+            // Permitir A y B unicamente en seleccion multiple y verdadero/falso
+            if (currentState == ST_SM_GAME || currentState == ST_VF_GAME) {
+               if (k == 'A') return 1; 
+               if (k == 'B') return 2; 
+            }
          }
       }
    } else if (digitsNeeded == 2) {
@@ -352,7 +385,7 @@ int waitAnswerLogic(int expected) {
       // Digit 1
       while(true) {
          char k = getKeyAndHandleVolume();
-         if (k == 'D') resetFunc();
+         checkResets(k);
          if (k == '#') return NAV_NEXT;
          if (k == '*') return NAV_PREV;
          
@@ -364,7 +397,7 @@ int waitAnswerLogic(int expected) {
       // Digit 2
       while(true) {
          char k = getKeyAndHandleVolume();
-         if (k == 'D') resetFunc();
+         checkResets(k);
          if (k == '#') return NAV_NEXT; 
          if (k == '*') return NAV_PREV; 
          
@@ -380,7 +413,7 @@ int waitAnswerLogic(int expected) {
       // Digit 1
       while(true) {
          char k = getKeyAndHandleVolume();
-         if (k == 'D') resetFunc();
+         checkResets(k);
          if (k == '#') return NAV_NEXT;
          if (k == '*') return NAV_PREV;
          if (k >= '0' && k <= '9') { val = (k - '0') * 100; break; }
@@ -388,7 +421,7 @@ int waitAnswerLogic(int expected) {
       // Digit 2
       while(true) {
          char k = getKeyAndHandleVolume();
-         if (k == 'D') resetFunc();
+         checkResets(k);
          if (k == '#') return NAV_NEXT;
          if (k == '*') return NAV_PREV;
          if (k >= '0' && k <= '9') { val += (k - '0') * 10; break; }
@@ -396,7 +429,7 @@ int waitAnswerLogic(int expected) {
       // Digit 3
       while(true) {
          char k = getKeyAndHandleVolume();
-         if (k == 'D') resetFunc();
+         checkResets(k);
          if (k == '#') return NAV_NEXT;
          if (k == '*') return NAV_PREV;
          if (k >= '0' && k <= '9') { val += (k - '0'); break; }
@@ -430,13 +463,7 @@ void setup() {
 void loop() {
   char key = getKeyAndHandleVolume();
   
-  if (key == 'D') {
-      Serial.println("Reset");
-      codigoParaMaster = 99;
-      long w = millis();
-      while(millis() - w < 1500) delay(10);
-      resetFunc(); 
-  }
+  checkResets(key);
 
   // Common Nav check not needed here as loops handle it
   
@@ -561,7 +588,7 @@ void loop() {
           
           currentQuestionIdx = 0;
           if (selectedGrade >= 5) {
-             currentSongChoice = random(0, 3); // 0, 1, or 2
+             currentSongChoice = random(0, 9); // 0 to 8
              songFragmentCount = 0;
              currentState = ST_EC_GAME;
           } else {
@@ -702,6 +729,10 @@ void loop() {
         
         if (userAns == q.correctAnswer) {
            playFeedback(true, isLast);
+           
+           // Audio interactivo: "Excelente, escuchemos la parte que liberaste de la cancion"
+           playFolderSafe(F_GRADE5, 36, MASTER_TALK);
+           
            // Reproducir fragmento de la cancion
            int fragmentFile = (currentSongChoice * 10) + 11 + songFragmentCount; // Ej: 11,12... 21,22... 31,32
            playFolderSafe(F_SONGS, fragmentFile, MASTER_SONG);
@@ -752,6 +783,9 @@ void loop() {
       break;
       
     case ST_IDLE:
+      if (key == '9') {
+         currentState = ST_MENU;
+      }
       break;
   }
 }
