@@ -60,7 +60,7 @@ int codigoParaMaster = MASTER_NEUTRAL;
 // NAVIGATION CODES
 const int NAV_NONE = 0;
 const int NAV_NEXT = 999;
-const int NAV_PREV = -999;
+const int NAV_REP = -999;
 
 // ==========================================
 // DATOS DE JUEGOS
@@ -244,7 +244,7 @@ int waitAudio(int status) {
   while(digitalRead(PIN_BUSY) == HIGH && millis() - t < 2500) {
      char k = getKeyAndHandleVolume();
      if (k == '#') { myDFPlayer.stop(); return NAV_NEXT; }
-     if (k == '*') { myDFPlayer.stop(); return NAV_PREV; }
+     if (k == '*') { myDFPlayer.stop(); return NAV_REP; }
      checkResets(k);
      delay(10);
   }
@@ -254,7 +254,7 @@ int waitAudio(int status) {
   while(true) {
      char k = getKeyAndHandleVolume();
      if (k == '#') { myDFPlayer.stop(); return NAV_NEXT; }
-     if (k == '*') { myDFPlayer.stop(); return NAV_PREV; }
+     if (k == '*') { myDFPlayer.stop(); return NAV_REP; }
      checkResets(k);
      
      if (digitalRead(PIN_BUSY) == HIGH) {
@@ -280,7 +280,7 @@ int playFolderSafe(int folder, int file, int status) {
   while(millis() - t < 500) {
      char k = getKeyAndHandleVolume();
      if (k == '#') { myDFPlayer.stop(); return NAV_NEXT; }
-     if (k == '*') { myDFPlayer.stop(); return NAV_PREV; }
+     if (k == '*') { myDFPlayer.stop(); return NAV_REP; }
      checkResets(k);
      delay(10);
   }
@@ -368,7 +368,7 @@ int waitAnswerLogic(int expected) {
          char k = getKeyAndHandleVolume(true);
          checkResets(k);
          if (k == '#') return NAV_NEXT;
-         if (k == '*') return NAV_PREV;
+         if (k == '*') return NAV_REP;
          
          if (k) {
             if (k >= '0' && k <= '9') return k - '0';
@@ -387,7 +387,7 @@ int waitAnswerLogic(int expected) {
          char k = getKeyAndHandleVolume();
          checkResets(k);
          if (k == '#') return NAV_NEXT;
-         if (k == '*') return NAV_PREV;
+         if (k == '*') return NAV_REP;
          
          if (k >= '0' && k <= '9') {
             val = (k - '0') * 10;
@@ -399,7 +399,7 @@ int waitAnswerLogic(int expected) {
          char k = getKeyAndHandleVolume();
          checkResets(k);
          if (k == '#') return NAV_NEXT; 
-         if (k == '*') return NAV_PREV; 
+         if (k == '*') return NAV_REP; 
          
          if (k >= '0' && k <= '9') {
             val += (k - '0');
@@ -415,7 +415,7 @@ int waitAnswerLogic(int expected) {
          char k = getKeyAndHandleVolume();
          checkResets(k);
          if (k == '#') return NAV_NEXT;
-         if (k == '*') return NAV_PREV;
+         if (k == '*') return NAV_REP;
          if (k >= '0' && k <= '9') { val = (k - '0') * 100; break; }
       }
       // Digit 2
@@ -423,7 +423,7 @@ int waitAnswerLogic(int expected) {
          char k = getKeyAndHandleVolume();
          checkResets(k);
          if (k == '#') return NAV_NEXT;
-         if (k == '*') return NAV_PREV;
+         if (k == '*') return NAV_REP;
          if (k >= '0' && k <= '9') { val += (k - '0') * 10; break; }
       }
       // Digit 3
@@ -431,7 +431,7 @@ int waitAnswerLogic(int expected) {
          char k = getKeyAndHandleVolume();
          checkResets(k);
          if (k == '#') return NAV_NEXT;
-         if (k == '*') return NAV_PREV;
+         if (k == '*') return NAV_REP;
          if (k >= '0' && k <= '9') { val += (k - '0'); break; }
       }
       return val;
@@ -544,12 +544,12 @@ void loop() {
          int nav = playFolderSafe(folder, q.fileNum, MASTER_TALK);
          
          if (nav == NAV_NEXT) { currentQuestionIdx++; return; }
-         if (nav == NAV_PREV) { if(currentQuestionIdx > 0) currentQuestionIdx--; return; }
+         if (nav == NAV_REP) { return; }
          
          int userAns = waitAnswerLogic(q.correctAnswer);
          
          if (userAns == NAV_NEXT) { currentQuestionIdx++; return; }
-         if (userAns == NAV_PREV) { if(currentQuestionIdx > 0) currentQuestionIdx--; return; }
+         if (userAns == NAV_REP) { return; }
          
          if (userAns == q.correctAnswer) {
              playFeedback(true, isLast);
@@ -649,11 +649,11 @@ void loop() {
         int nav = playFolderSafe(folder, q.fileNum, MASTER_TALK);
         
         if (nav == NAV_NEXT) { currentQuestionIdx++; return; } 
-        if (nav == NAV_PREV) { if(currentQuestionIdx>0) currentQuestionIdx--; return; } 
+        if (nav == NAV_REP) { return; } 
         
         int userAns = waitAnswerLogic(q.correctAnswer);
         if (userAns == NAV_NEXT) { currentQuestionIdx++; return; } 
-        if (userAns == NAV_PREV) { if(currentQuestionIdx>0) currentQuestionIdx--; return; } 
+        if (userAns == NAV_REP) { return; } 
         
         if (userAns == q.correctAnswer) {
            playFeedback(true, isLast);
@@ -686,11 +686,11 @@ void loop() {
         int nav = playFolderSafe(folder, q.fileNum, MASTER_TALK);
         
         if (nav == NAV_NEXT) { currentQuestionIdx++; return; } 
-        if (nav == NAV_PREV) { if(currentQuestionIdx>0) currentQuestionIdx--; return; } 
+        if (nav == NAV_REP) { return; } 
         
         int userAns = waitAnswerLogic(q.correctAnswer);
         if (userAns == NAV_NEXT) { currentQuestionIdx++; return; } 
-        if (userAns == NAV_PREV) { if(currentQuestionIdx>0) currentQuestionIdx--; return; } 
+        if (userAns == NAV_REP) { return; } 
         
         if (userAns == q.correctAnswer) {
            playFeedback(true, isLast);
@@ -721,11 +721,11 @@ void loop() {
         int nav = playFolderSafe(folder, q.fileNum, MASTER_TALK);
         
         if (nav == NAV_NEXT) { currentQuestionIdx++; return; } 
-        if (nav == NAV_PREV) { if(currentQuestionIdx>0) currentQuestionIdx--; return; } 
+        if (nav == NAV_REP) { return; } 
         
         int userAns = waitAnswerLogic(q.correctAnswer);
         if (userAns == NAV_NEXT) { currentQuestionIdx++; return; } 
-        if (userAns == NAV_PREV) { if(currentQuestionIdx>0) currentQuestionIdx--; return; } 
+        if (userAns == NAV_REP) { return; } 
         
         if (userAns == q.correctAnswer) {
            playFeedback(true, isLast);
@@ -767,11 +767,11 @@ void loop() {
         int nav = playFolderSafe(folder, q.fileNum, MASTER_TALK);
         
         if (nav == NAV_NEXT) { currentQuestionIdx++; return; } 
-        if (nav == NAV_PREV) { if(currentQuestionIdx>0) currentQuestionIdx--; return; } 
+        if (nav == NAV_REP) { return; } 
         
         int userAns = waitAnswerLogic(q.correctAnswer);
         if (userAns == NAV_NEXT) { currentQuestionIdx++; return; } 
-        if (userAns == NAV_PREV) { if(currentQuestionIdx>0) currentQuestionIdx--; return; } 
+        if (userAns == NAV_REP) { return; } 
         
         if (userAns == q.correctAnswer) {
            playFeedback(true, isLast);
