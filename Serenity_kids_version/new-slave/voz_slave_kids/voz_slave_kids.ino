@@ -26,7 +26,7 @@ Keypad customKeypad = Keypad(makeKeymap(hexaKeys), rowPins, colPins, ROWS, COLS)
 SoftwareSerial mySerial(2, 4);  // RX, TX
 DFRobotDFPlayerMini myDFPlayer;
 const int PIN_BUSY = 3;
-const int maxVolumen = 35; // 23 recommended volume - 30 max
+const int maxVolumen = 30; // 23 recommended volume - 30 max
 int currentVolume = 24;
 
 
@@ -140,7 +140,7 @@ Question g4_sd[G4_SD_COUNT] = {
 // === GRADE 5 DATA ===
 const int G5_DRILL_COUNT = 10;
 Question g5_drill[G5_DRILL_COUNT] = {
-  {2,12}, {3,5}, {4,5}, {5,4}, {6,6}, {7,99}, {8,11}, {9,9}, {10,0}, {11,11}
+  {2,12}, {3,5}, {4,5}, {5,4}, {6,6}, {7,99}, {8,12}, {9,14}, {10,0}, {11,11}
 };
 
 const int G5_EC_COUNT = 20;
